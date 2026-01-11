@@ -1,6 +1,6 @@
 # frame-automation
 
-Display weekly goals on a Samsung Frame TV in Art Mode.
+Display markdown content on a Samsung Frame TV in Art Mode.
 
 Reads a markdown file, renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
 
@@ -22,17 +22,19 @@ uv run playwright install chromium
 
 ```bash
 export FRAME_TV_IP=192.168.1.x
-export FRAME_GOALS_FILE=/path/to/goals.md
+export FRAME_CONTENT_FILE=/path/to/content.md
 
 uv run frame-update
 ```
 
-The goals file should be markdown with bullet points:
+The content file is standard markdown:
 
 ```markdown
-- First goal
-- Second goal
-- Third goal
+# This Week
+
+- First item
+- Second item
+- Third item
 ```
 
 ## License

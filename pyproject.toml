@@ -1,9 +1,10 @@
 [project]
 name = "frame-automation"
 version = "0.1.0"
-description = "Display weekly goals on Samsung Frame TV Art Mode"
+description = "Display markdown content on Samsung Frame TV Art Mode"
 requires-python = ">=3.13"
 dependencies = [
+    "markdown>=3.7",
     "playwright>=1.57.0",
     "samsungtvws>=3.0.3",
 ]

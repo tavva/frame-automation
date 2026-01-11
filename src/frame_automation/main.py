@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# ABOUTME: Renders weekly goals to an image and uploads to Samsung Frame TV.
-# ABOUTME: Configured via FRAME_TV_IP and FRAME_GOALS_FILE environment variables.
+# ABOUTME: Renders markdown content to an image and uploads to Samsung Frame TV.
+# ABOUTME: Configured via FRAME_TV_IP and FRAME_CONTENT_FILE environment variables.
 
 import os
 import sys
 import tempfile
 from pathlib import Path
 
+import markdown
 from playwright.sync_api import sync_playwright
 from samsungtvws import SamsungTVWS
 
@@ -17,38 +18,24 @@ IMAGE_HEIGHT = 1080
 def get_config() -> tuple[str, Path]:
     """Read configuration from environment variables."""
     tv_ip = os.environ.get("FRAME_TV_IP")
-    goals_file = os.environ.get("FRAME_GOALS_FILE")
+    content_file = os.environ.get("FRAME_CONTENT_FILE")
 
     if not tv_ip:
         sys.exit("Error: FRAME_TV_IP environment variable not set")
-    if not goals_file:
-        sys.exit("Error: FRAME_GOALS_FILE environment variable not set")
+    if not content_file:
+        sys.exit("Error: FRAME_CONTENT_FILE environment variable not set")
 
-    goals_path = Path(goals_file)
-    if not goals_path.exists():
-        sys.exit(f"Error: Goals file not found: {goals_path}")
+    content_path = Path(content_file)
+    if not content_path.exists():
+        sys.exit(f"Error: Content file not found: {content_path}")
 
-    return tv_ip, goals_path
-
-
-def read_goals(path: Path) -> list[str]:
-    """Read goals from markdown file, returning list of goal strings."""
-    text = path.read_text()
-    goals = []
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if line.startswith("- "):
-            goals.append(line[2:])
-        elif line.startswith("* "):
-            goals.append(line[2:])
-        elif line:
-            goals.append(line)
-    return goals
+    return tv_ip, content_path
 
 
-def render_goals_to_image(goals: list[str], output_path: Path) -> None:
-    """Render goals as HTML and screenshot to image file."""
-    goals_html = "\n".join(f"<li>{goal}</li>" for goal in goals)
+def render_to_image(content_path: Path, output_path: Path) -> None:
+    """Render markdown content to image file."""
+    markdown_text = content_path.read_text()
+    content_html = markdown.markdown(markdown_text)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -76,35 +63,92 @@ def render_goals_to_image(goals: list[str], output_path: Path) -> None:
         h1 {{
             font-size: 48px;
             font-weight: 300;
-            margin-bottom: 48px;
+            margin-bottom: 32px;
             color: #e0e0e0;
             letter-spacing: -0.5px;
         }}
-        ul {{
-            list-style: none;
+        h2 {{
+            font-size: 36px;
+            font-weight: 300;
+            margin-bottom: 24px;
+            color: #e0e0e0;
+        }}
+        h3 {{
+            font-size: 28px;
+            font-weight: 400;
+            margin-bottom: 20px;
+            color: #e0e0e0;
+        }}
+        p {{
+            font-size: 32px;
+            font-weight: 400;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }}
+        ul, ol {{
+            margin-bottom: 24px;
+            padding-left: 40px;
         }}
         li {{
             font-size: 32px;
             font-weight: 400;
             line-height: 1.6;
-            margin-bottom: 24px;
-            padding-left: 40px;
-            position: relative;
+            margin-bottom: 16px;
         }}
-        li::before {{
+        ul {{
+            list-style: none;
+        }}
+        ul li {{
+            position: relative;
+            padding-left: 40px;
+        }}
+        ul li::before {{
             content: "→";
             position: absolute;
             left: 0;
             color: #888;
         }}
+        ol {{
+            list-style-position: inside;
+            padding-left: 0;
+        }}
+        ol li {{
+            padding-left: 8px;
+        }}
+        strong {{
+            font-weight: 600;
+        }}
+        em {{
+            font-style: italic;
+        }}
+        code {{
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            background: #2a2a2a;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }}
+        pre {{
+            background: #2a2a2a;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }}
+        pre code {{
+            background: none;
+            padding: 0;
+        }}
+        blockquote {{
+            border-left: 4px solid #888;
+            padding-left: 20px;
+            margin-bottom: 24px;
+            color: #ccc;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>This Week</h1>
-        <ul>
-            {goals_html}
-        </ul>
+        {content_html}
     </div>
 </body>
 </html>"""
@@ -137,17 +181,13 @@ def set_active_art(tv_ip: str, content_id: str) -> None:
 
 
 def main():
-    tv_ip, goals_file = get_config()
-
-    print("Reading goals...")
-    goals = read_goals(goals_file)
-    print(f"  Found {len(goals)} goals")
+    tv_ip, content_file = get_config()
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         image_path = Path(f.name)
 
     print("Rendering image...")
-    render_goals_to_image(goals, image_path)
+    render_to_image(content_file, image_path)
     print(f"  Saved to {image_path}")
 
     print(f"Uploading to TV ({tv_ip})...")

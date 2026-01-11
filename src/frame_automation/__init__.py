@@ -1,2 +1,2 @@
-# ABOUTME: Samsung Frame TV weekly goals display automation.
-# ABOUTME: Renders goals to an image and uploads to the TV's Art Mode.
+# ABOUTME: Samsung Frame TV markdown display automation.
+# ABOUTME: Renders markdown content to an image and uploads to the TV's Art Mode.

@@ -44,7 +44,7 @@ body::after {
     width: 480px;
     height: 640px;
     margin-left: auto;
-    margin-right: 60px;
+    margin-right: 100px;
     background-image: url(user-provided/photo.jpg);
     background-size: cover;
     background-position: center;

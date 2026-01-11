@@ -124,7 +124,7 @@ class TestEnsureArtMode:
                 art_mode_calls.append(mode)
 
         class MockTV:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, port=8001, timeout=None, token_file=None):
                 pass
 
             def art(self):
@@ -154,7 +154,7 @@ class TestEnsureArtMode:
                 art_mode_calls.append(mode)
 
         class MockTV:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, port=8001, timeout=None, token_file=None):
                 pass
 
             def art(self):
@@ -191,7 +191,7 @@ class TestEnsureArtMode:
                 connection_attempts.append("art_mode")
 
         class MockTV:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, port=8001, timeout=None, token_file=None):
                 connection_attempts.append("connect")
                 # Fail on first attempt, succeed on second
                 if len(connection_attempts) == 1:

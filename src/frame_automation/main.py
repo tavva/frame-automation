@@ -238,7 +238,7 @@ def ensure_art_mode(tv_ip: str, mac: str | None = None) -> None:
                 print(f"  Retry {attempt}/{WAKE_MAX_RETRIES - 1}...", flush=True)
 
             # Test connection first - this will fail fast if TV is off
-            tv = SamsungTVWS(tv_ip, timeout=5)
+            tv = SamsungTVWS(tv_ip, port=8002, timeout=5, token_file=get_token_file_path())
             art = tv.art()
             art.get_artmode()  # Quick check that TV is responsive
 

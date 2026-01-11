@@ -1,4 +1,4 @@
-/* ABOUTME: Split layout theme with content left, framed photo right. */
+/* ABOUTME: Split layout theme with full-bleed (no border/shadow). */
 /* ABOUTME: Place your photo at themes/split/user-provided/photo.jpg */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
@@ -12,30 +12,15 @@
 body {
     width: 1920px;
     height: 1080px;
-    background: #a89880;
+    background-image: url(paper/background.jpg);
+    background-size: cover;
+    background-position: center;
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
     align-items: center;
-    padding: 65px 75px;
+    padding: 80px 100px;
     gap: 80px;
-    position: relative;
-}
-
-body::before {
-    content: "";
-    position: absolute;
-    top: 65px;
-    left: 75px;
-    right: 75px;
-    bottom: 65px;
-    background-image: url(../paper/background.jpg);
-    background-size: cover;
-    background-position: center;
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.4),
-        0 30px 60px rgba(0, 0, 0, 0.3);
-    z-index: 0;
 }
 
 body::after {
@@ -45,20 +30,16 @@ body::after {
     height: 640px;
     margin-left: auto;
     margin-right: 60px;
-    background-image: url(user-provided/photo.jpg);
+    background-image: url(split/user-provided/photo.jpg);
     background-size: cover;
     background-position: center;
     border: 6px solid #3d3222;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    z-index: 1;
 }
 
 .container {
     flex: 1;
     max-width: 900px;
-    padding: 80px 100px;
-    position: relative;
-    z-index: 1;
 }
 
 h1 {

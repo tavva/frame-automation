@@ -1,5 +1,5 @@
-/* ABOUTME: Split layout theme with content left, framed photo right. */
-/* ABOUTME: Place your photo at themes/split/user-provided/photo.jpg */
+/* ABOUTME: Paper theme with full-bleed (no border/shadow). */
+/* ABOUTME: Letterpress broadside aesthetic - refined editorial typography on paper. */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
 
@@ -12,61 +12,27 @@
 body {
     width: 1920px;
     height: 1080px;
-    background: #a89880;
+    background-image: url(paper/background.jpg);
+    background-size: cover;
+    background-position: center;
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
     align-items: center;
-    padding: 65px 75px;
-    gap: 80px;
-    position: relative;
-}
-
-body::before {
-    content: "";
-    position: absolute;
-    top: 65px;
-    left: 75px;
-    right: 75px;
-    bottom: 65px;
-    background-image: url(../paper/background.jpg);
-    background-size: cover;
-    background-position: center;
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.4),
-        0 30px 60px rgba(0, 0, 0, 0.3);
-    z-index: 0;
-}
-
-body::after {
-    content: "";
-    flex: 0 0 auto;
-    width: 480px;
-    height: 640px;
-    margin-left: auto;
-    margin-right: 60px;
-    background-image: url(user-provided/photo.jpg);
-    background-size: cover;
-    background-position: center;
-    border: 6px solid #3d3222;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    z-index: 1;
+    justify-content: center;
+    padding: 100px 140px;
 }
 
 .container {
-    flex: 1;
-    max-width: 900px;
-    padding: 80px 100px;
-    position: relative;
-    z-index: 1;
+    max-width: 1200px;
 }
 
 h1 {
     font-family: 'Playfair Display', Georgia, serif;
-    font-size: 64px;
+    font-size: 72px;
     font-weight: 400;
     font-style: italic;
-    margin-bottom: 40px;
+    margin-bottom: 48px;
     color: #1a1208;
     letter-spacing: -1px;
     line-height: 1.1;
@@ -74,44 +40,45 @@ h1 {
 
 h2 {
     font-family: 'Playfair Display', Georgia, serif;
-    font-size: 44px;
+    font-size: 48px;
     font-weight: 400;
-    margin-bottom: 28px;
+    margin-bottom: 32px;
     color: #1a1208;
+    letter-spacing: 0.5px;
 }
 
 h3 {
     font-family: 'Playfair Display', Georgia, serif;
-    font-size: 32px;
+    font-size: 36px;
     font-weight: 600;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     color: #1a1208;
     text-transform: uppercase;
     letter-spacing: 3px;
-    font-size: 20px;
+    font-size: 24px;
 }
 
 p {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 400;
     line-height: 1.7;
-    margin-bottom: 24px;
+    margin-bottom: 28px;
     color: #3d3222;
 }
 
 ul, ol {
-    margin-bottom: 24px;
+    margin-bottom: 28px;
     padding-left: 0;
 }
 
 li {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 400;
     line-height: 1.7;
-    margin-bottom: 18px;
+    margin-bottom: 20px;
     color: #3d3222;
     list-style: none;
-    padding-left: 32px;
+    padding-left: 36px;
     position: relative;
 }
 
@@ -120,7 +87,7 @@ li::before {
     position: absolute;
     left: 0;
     color: #8b7355;
-    font-size: 18px;
+    font-size: 20px;
 }
 
 ol {
@@ -135,7 +102,7 @@ ol li::before {
     content: counter(item) ".";
     font-family: 'Playfair Display', Georgia, serif;
     font-style: italic;
-    font-size: 22px;
+    font-size: 24px;
     color: #8b7355;
 }
 
@@ -158,9 +125,9 @@ code {
 
 pre {
     background: rgba(139, 115, 85, 0.1);
-    padding: 20px;
+    padding: 24px;
     border-left: 3px solid #8b7355;
-    margin-bottom: 24px;
+    margin-bottom: 28px;
     overflow-x: auto;
 }
 
@@ -171,8 +138,8 @@ pre code {
 
 blockquote {
     border-left: 3px solid #8b7355;
-    padding-left: 24px;
-    margin-bottom: 24px;
+    padding-left: 28px;
+    margin-bottom: 28px;
     font-style: italic;
     color: #5a4a36;
 }

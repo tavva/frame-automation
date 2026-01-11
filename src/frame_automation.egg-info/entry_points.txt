@@ -1,0 +1,2 @@
+[console_scripts]
+frame-update = frame_automation.main:main

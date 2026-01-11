@@ -1,0 +1,9 @@
+pyproject.toml
+src/frame_automation/__init__.py
+src/frame_automation/main.py
+src/frame_automation.egg-info/PKG-INFO
+src/frame_automation.egg-info/SOURCES.txt
+src/frame_automation.egg-info/dependency_links.txt
+src/frame_automation.egg-info/entry_points.txt
+src/frame_automation.egg-info/requires.txt
+src/frame_automation.egg-info/top_level.txt

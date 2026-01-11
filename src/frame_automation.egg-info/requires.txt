@@ -1,2 +1,0 @@
-playwright>=1.57.0
-samsungtvws>=3.0.3

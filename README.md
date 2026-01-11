@@ -34,3 +34,7 @@ The goals file should be markdown with bullet points:
 - Second goal
 - Third goal
 ```
+
+## License
+
+MIT

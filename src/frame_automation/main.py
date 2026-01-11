@@ -13,8 +13,6 @@ from pathlib import Path
 import threading
 import time
 
-import markdown
-from playwright.sync_api import sync_playwright
 from samsungtvws import SamsungTVWS
 from wakeonlan import send_magic_packet
 
@@ -137,6 +135,9 @@ def load_theme_css(theme_name: str) -> str:
 
 def render_to_image(content_path: Path, output_path: Path, theme: str) -> None:
     """Render markdown content to image file."""
+    import markdown
+    from playwright.sync_api import sync_playwright
+
     markdown_text = content_path.read_text()
     content_html = markdown.markdown(markdown_text)
     theme_css = load_theme_css(theme)

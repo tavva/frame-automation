@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # ABOUTME: Renders weekly goals to an image and uploads to Samsung Frame TV.
-# ABOUTME: Run with: uv run python update_frame.py
+# ABOUTME: Configured via FRAME_TV_IP and FRAME_GOALS_FILE environment variables.
 
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -9,10 +10,25 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 from samsungtvws import SamsungTVWS
 
-TV_IP = "TV_IP_HERE"
-GOALS_FILE = Path.home() / "path/to/goals.md"
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
+
+
+def get_config() -> tuple[str, Path]:
+    """Read configuration from environment variables."""
+    tv_ip = os.environ.get("FRAME_TV_IP")
+    goals_file = os.environ.get("FRAME_GOALS_FILE")
+
+    if not tv_ip:
+        sys.exit("Error: FRAME_TV_IP environment variable not set")
+    if not goals_file:
+        sys.exit("Error: FRAME_GOALS_FILE environment variable not set")
+
+    goals_path = Path(goals_file)
+    if not goals_path.exists():
+        sys.exit(f"Error: Goals file not found: {goals_path}")
+
+    return tv_ip, goals_path
 
 
 def read_goals(path: Path) -> list[str]:
@@ -101,9 +117,9 @@ def render_goals_to_image(goals: list[str], output_path: Path) -> None:
         browser.close()
 
 
-def upload_to_tv(image_path: Path) -> str:
+def upload_to_tv(tv_ip: str, image_path: Path) -> str:
     """Upload image to TV and return content_id."""
-    tv = SamsungTVWS(TV_IP)
+    tv = SamsungTVWS(tv_ip)
     art = tv.art()
 
     with open(image_path, "rb") as f:
@@ -113,16 +129,18 @@ def upload_to_tv(image_path: Path) -> str:
     return content_id
 
 
-def set_active_art(content_id: str) -> None:
+def set_active_art(tv_ip: str, content_id: str) -> None:
     """Set the uploaded image as the active artwork."""
-    tv = SamsungTVWS(TV_IP)
+    tv = SamsungTVWS(tv_ip)
     art = tv.art()
     art.select_image(content_id)
 
 
 def main():
+    tv_ip, goals_file = get_config()
+
     print("Reading goals...")
-    goals = read_goals(GOALS_FILE)
+    goals = read_goals(goals_file)
     print(f"  Found {len(goals)} goals")
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
@@ -132,12 +150,12 @@ def main():
     render_goals_to_image(goals, image_path)
     print(f"  Saved to {image_path}")
 
-    print("Uploading to TV...")
-    content_id = upload_to_tv(image_path)
+    print(f"Uploading to TV ({tv_ip})...")
+    content_id = upload_to_tv(tv_ip, image_path)
     print(f"  Content ID: {content_id}")
 
     print("Setting as active artwork...")
-    set_active_art(content_id)
+    set_active_art(tv_ip, content_id)
 
     print("Done!")
 

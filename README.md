@@ -4,6 +4,14 @@ Display markdown content on a Samsung Frame TV in Art Mode.
 
 Reads a markdown file, renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
 
+<p align="center">
+  <img src="docs/assets/demo-screenshot.jpg" alt="Rendered output" width="600">
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo-frame.jpg" alt="On the Frame TV" width="600">
+</p>
+
 ## Requirements
 
 - Samsung Frame TV (not all versions will work, tested on 2022 QE32LS03TC)

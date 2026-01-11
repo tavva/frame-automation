@@ -1,0 +1,159 @@
+/* ABOUTME: Split layout theme with content left, framed photo right. */
+/* ABOUTME: Place your photo at themes/split/user-provided/photo.jpg */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 1920px;
+    height: 1080px;
+    background-image: url(../paper/background.jpg);
+    background-size: cover;
+    background-position: center;
+    color: #2c2416;
+    font-family: 'Lora', Georgia, serif;
+    display: flex;
+    align-items: center;
+    padding: 80px 100px;
+    gap: 80px;
+}
+
+body::after {
+    content: "";
+    flex: 0 0 auto;
+    width: 480px;
+    height: 640px;
+    margin-left: auto;
+    margin-right: 60px;
+    background-image: url(user-provided/photo.jpg);
+    background-size: cover;
+    background-position: center;
+    border: 6px solid #3d3222;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.container {
+    flex: 1;
+    max-width: 900px;
+}
+
+h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 64px;
+    font-weight: 400;
+    font-style: italic;
+    margin-bottom: 40px;
+    color: #1a1208;
+    letter-spacing: -1px;
+    line-height: 1.1;
+}
+
+h2 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 44px;
+    font-weight: 400;
+    margin-bottom: 28px;
+    color: #1a1208;
+}
+
+h3 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 32px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: #1a1208;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 20px;
+}
+
+p {
+    font-size: 26px;
+    font-weight: 400;
+    line-height: 1.7;
+    margin-bottom: 24px;
+    color: #3d3222;
+}
+
+ul, ol {
+    margin-bottom: 24px;
+    padding-left: 0;
+}
+
+li {
+    font-size: 26px;
+    font-weight: 400;
+    line-height: 1.7;
+    margin-bottom: 18px;
+    color: #3d3222;
+    list-style: none;
+    padding-left: 32px;
+    position: relative;
+}
+
+li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #8b7355;
+    font-size: 18px;
+}
+
+ol {
+    counter-reset: item;
+}
+
+ol li {
+    counter-increment: item;
+}
+
+ol li::before {
+    content: counter(item) ".";
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic;
+    font-size: 22px;
+    color: #8b7355;
+}
+
+strong {
+    font-weight: 600;
+    color: #1a1208;
+}
+
+em {
+    font-style: italic;
+}
+
+code {
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    background: rgba(139, 115, 85, 0.12);
+    padding: 3px 8px;
+    border-radius: 2px;
+    font-size: 0.9em;
+}
+
+pre {
+    background: rgba(139, 115, 85, 0.1);
+    padding: 20px;
+    border-left: 3px solid #8b7355;
+    margin-bottom: 24px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+blockquote {
+    border-left: 3px solid #8b7355;
+    padding-left: 24px;
+    margin-bottom: 24px;
+    font-style: italic;
+    color: #5a4a36;
+}

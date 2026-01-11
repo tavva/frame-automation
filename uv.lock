@@ -69,6 +69,7 @@ dependencies = [
     { name = "markdown" },
     { name = "playwright" },
     { name = "samsungtvws" },
+    { name = "wakeonlan" },
 ]
 
 [package.dev-dependencies]
@@ -81,6 +82,7 @@ requires-dist = [
     { name = "markdown", specifier = ">=3.7" },
     { name = "playwright", specifier = ">=1.57.0" },
     { name = "samsungtvws", specifier = ">=3.0.3" },
+    { name = "wakeonlan", specifier = ">=3.1.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -262,6 +264,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+]
+
+[[package]]
+name = "wakeonlan"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/98/b92125baeaf67b3a838bfdb4ac4e685c793ce2771686b10df44275e424a4/wakeonlan-3.1.0.tar.gz", hash = "sha256:aa12edc2587353528a89ad58a54c63212dc2a12226c186b7fcc02caa162cd962", size = 4242, upload-time = "2023-11-17T13:39:38.238Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/47/99a02d847104bbc08d10b147e77593c127c405774fa7f5247afd152754e5/wakeonlan-3.1.0-py3-none-any.whl", hash = "sha256:9414da87f48e5dc8a1bb0fa15aba5a0079cfd014231c4cc8e6f2477a0d078c7e", size = 4984, upload-time = "2023-11-17T13:39:36.753Z" },
 ]
 
 [[package]]

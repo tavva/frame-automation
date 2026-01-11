@@ -10,14 +10,21 @@ import sys
 import tempfile
 from pathlib import Path
 
+import threading
+import time
+
 import markdown
 from playwright.sync_api import sync_playwright
 from samsungtvws import SamsungTVWS
+from wakeonlan import send_magic_packet
 
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
 STATE_DIR = Path.home() / ".frame-automation"
 STATE_FILE = "last_content_id"
+TOKEN_FILE = "tv_token"
+WAKE_RETRY_DELAY = 5  # Seconds between retries when waiting for TV to wake
+WAKE_MAX_RETRIES = 12  # Max attempts (12 * 5s = 60s timeout)
 
 
 def get_state_file_path() -> Path:
@@ -189,6 +196,110 @@ def delete_previous_art(tv_ip: str) -> None:
     except Exception as e:
         # Image may have been manually deleted - not an error
         print(f"  Could not delete previous image {previous_id}: {e}")
+
+
+def get_token_file_path() -> str:
+    """Return path to the token file for TV authorization."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    return str(STATE_DIR / TOKEN_FILE)
+
+
+def turn_off(tv_ip: str) -> None:
+    """Turn off the Frame TV by holding power key."""
+    tv = SamsungTVWS(tv_ip, port=8002, token_file=get_token_file_path())
+    tv.hold_key("KEY_POWER", 3)
+
+
+def get_broadcast_address(tv_ip: str) -> str:
+    """Derive broadcast address from TV IP (assumes /24 subnet)."""
+    parts = tv_ip.rsplit(".", 1)
+    return f"{parts[0]}.255"
+
+
+def ensure_art_mode(tv_ip: str, mac: str | None = None) -> None:
+    """Ensure the TV is on and in art mode.
+
+    If MAC address is provided, sends Wake-on-LAN packets and retries
+    connection until the TV responds.
+    """
+    broadcast = get_broadcast_address(tv_ip)
+
+    last_error = None
+    for attempt in range(WAKE_MAX_RETRIES):
+        if mac:
+            # Send multiple WoL packets like HA integration does
+            for _ in range(3):
+                send_magic_packet(mac, ip_address=broadcast)
+                time.sleep(0.25)
+
+        try:
+            if attempt > 0:
+                print(f"  Retry {attempt}/{WAKE_MAX_RETRIES - 1}...", flush=True)
+
+            # Test connection first - this will fail fast if TV is off
+            tv = SamsungTVWS(tv_ip, timeout=5)
+            art = tv.art()
+            art.get_artmode()  # Quick check that TV is responsive
+
+            # TV is responding - now set art mode
+            # Run in thread with timeout since it may block waiting for response
+            error = [None]
+
+            def do_set_artmode():
+                try:
+                    art.set_artmode(True)
+                except Exception as e:
+                    error[0] = e
+
+            thread = threading.Thread(target=do_set_artmode, daemon=True)
+            thread.start()
+            thread.join(timeout=10)
+
+            if error[0]:
+                raise error[0]
+
+            # TV was responsive and we sent the command - success
+            return
+        except Exception as e:
+            last_error = e
+            if not mac:
+                raise
+            if attempt < WAKE_MAX_RETRIES - 1:
+                time.sleep(WAKE_RETRY_DELAY)
+
+    raise ConnectionError(f"Failed to connect to TV after {WAKE_MAX_RETRIES} attempts") from last_error
+
+
+def get_tv_ip() -> str:
+    """Get TV IP from environment variable."""
+    tv_ip = os.environ.get("FRAME_TV_IP")
+    if not tv_ip:
+        sys.exit("Error: FRAME_TV_IP environment variable not set")
+    return tv_ip
+
+
+def main_off():
+    """CLI entry point to turn off the TV."""
+    tv_ip = get_tv_ip()
+    print(f"Turning off TV ({tv_ip})...")
+    turn_off(tv_ip)
+    print("Done!")
+
+
+def main_art():
+    """CLI entry point to ensure TV is on and in art mode."""
+    tv_ip = get_tv_ip()
+    mac = os.environ.get("FRAME_TV_MAC")
+
+    if mac:
+        print(f"Waking TV ({mac}) and setting art mode...", flush=True)
+    else:
+        print(f"Setting art mode on TV ({tv_ip})...", flush=True)
+
+    ensure_art_mode(tv_ip, mac=mac)
+    print("Done!", flush=True)
+    # Force exit - the websocket connection doesn't close cleanly
+    os._exit(0)
 
 
 def main():

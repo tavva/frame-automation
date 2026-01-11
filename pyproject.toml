@@ -7,10 +7,13 @@ dependencies = [
     "markdown>=3.7",
     "playwright>=1.57.0",
     "samsungtvws>=3.0.3",
+    "wakeonlan>=3.1.0",
 ]
 
 [project.scripts]
 frame-update = "frame_automation.main:main"
+frame-off = "frame_automation.main:main_off"
+frame-art = "frame_automation.main:main_art"
 
 [dependency-groups]
 dev = ["pytest>=8.0"]

@@ -2,3 +2,7 @@
 venv/
 __pycache__/
 *.egg-info/
+
+# User-provided theme assets
+themes/*/user-provided/
+user-themes/

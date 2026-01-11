@@ -18,23 +18,28 @@ IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
 
 
-def get_themes_dir() -> Path:
-    """Get the themes directory path."""
-    return Path(__file__).parent.parent.parent / "themes"
+def get_repo_root() -> Path:
+    """Get the repository root path."""
+    return Path(__file__).parent.parent.parent
+
+
+def get_theme_dirs() -> list[Path]:
+    """Get theme directories in priority order (user-themes first)."""
+    root = get_repo_root()
+    return [root / "user-themes", root / "themes"]
 
 
 def get_available_themes() -> list[str]:
-    """List available theme names."""
-    themes_dir = get_themes_dir()
-    if not themes_dir.exists():
-        return []
-
-    themes = []
-    for item in themes_dir.iterdir():
-        if item.is_file() and item.suffix == ".css":
-            themes.append(item.stem)
-        elif item.is_dir() and (item / "theme.css").exists():
-            themes.append(item.name)
+    """List available theme names from all theme directories."""
+    themes = set()
+    for themes_dir in get_theme_dirs():
+        if not themes_dir.exists():
+            continue
+        for item in themes_dir.iterdir():
+            if item.is_file() and item.suffix == ".css":
+                themes.add(item.stem)
+            elif item.is_dir() and (item / "theme.css").exists():
+                themes.add(item.name)
     return sorted(themes)
 
 
@@ -60,19 +65,24 @@ def get_config() -> tuple[str, Path, str]:
     return tv_ip, content_path, theme
 
 
+def find_theme_path(theme_name: str) -> tuple[Path, Path]:
+    """Find theme CSS path and base directory, checking user-themes first."""
+    for themes_dir in get_theme_dirs():
+        if not themes_dir.exists():
+            continue
+        # Check for folder theme first, then single file
+        theme_folder = themes_dir / theme_name
+        if theme_folder.is_dir() and (theme_folder / "theme.css").exists():
+            return theme_folder / "theme.css", theme_folder
+        css_file = themes_dir / f"{theme_name}.css"
+        if css_file.exists():
+            return css_file, themes_dir
+    raise FileNotFoundError(f"Theme not found: {theme_name}")
+
+
 def load_theme_css(theme_name: str) -> str:
     """Load and process theme CSS, embedding local images as base64 data URIs."""
-    themes_dir = get_themes_dir()
-
-    # Check for folder theme first, then single file
-    theme_folder = themes_dir / theme_name
-    if theme_folder.is_dir():
-        css_path = theme_folder / "theme.css"
-        base_dir = theme_folder
-    else:
-        css_path = themes_dir / f"{theme_name}.css"
-        base_dir = themes_dir
-
+    css_path, base_dir = find_theme_path(theme_name)
     css = css_path.read_text()
 
     # Replace relative url() references with base64 data URIs for local images

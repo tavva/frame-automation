@@ -12,19 +12,25 @@
 body {
     width: 1920px;
     height: 1080px;
-    background-image: url(background.jpg);
-    background-size: cover;
-    background-position: center;
+    background: #a89880;
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 100px 140px;
+    padding: 65px 75px;
 }
 
 .container {
-    max-width: 1200px;
+    width: 100%;
+    height: 100%;
+    background-image: url(background.jpg);
+    background-size: cover;
+    background-position: center;
+    padding: 80px 100px;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.4),
+        0 30px 60px rgba(0, 0, 0, 0.3);
 }
 
 h1 {

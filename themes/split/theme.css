@@ -12,34 +12,41 @@
 body {
     width: 1920px;
     height: 1080px;
-    background-image: url(../paper/background.jpg);
-    background-size: cover;
-    background-position: center;
+    background: #a89880;
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
     align-items: center;
+    justify-content: center;
+    padding: 65px 75px;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    background-image: url(../paper/background.jpg);
+    background-size: cover;
+    background-position: center;
     padding: 80px 100px;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.4),
+        0 30px 60px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
     gap: 80px;
 }
 
-body::after {
+.container::after {
     content: "";
     flex: 0 0 auto;
     width: 480px;
     height: 640px;
     margin-left: auto;
-    margin-right: 60px;
     background-image: url(user-provided/photo.jpg);
     background-size: cover;
     background-position: center;
     border: 6px solid #3d3222;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.container {
-    flex: 1;
-    max-width: 900px;
 }
 
 h1 {

@@ -1,0 +1,145 @@
+/* ABOUTME: Paper theme with textured background. */
+/* ABOUTME: Letterpress broadside aesthetic - refined editorial typography on paper. */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 1920px;
+    height: 1080px;
+    background-image: url(background.jpg);
+    background-size: cover;
+    background-position: center;
+    color: #2c2416;
+    font-family: 'Lora', Georgia, serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 100px 140px;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 72px;
+    font-weight: 400;
+    font-style: italic;
+    margin-bottom: 48px;
+    color: #1a1208;
+    letter-spacing: -1px;
+    line-height: 1.1;
+}
+
+h2 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 48px;
+    font-weight: 400;
+    margin-bottom: 32px;
+    color: #1a1208;
+    letter-spacing: 0.5px;
+}
+
+h3 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 36px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: #1a1208;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 24px;
+}
+
+p {
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.7;
+    margin-bottom: 28px;
+    color: #3d3222;
+}
+
+ul, ol {
+    margin-bottom: 28px;
+    padding-left: 0;
+}
+
+li {
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.7;
+    margin-bottom: 20px;
+    color: #3d3222;
+    list-style: none;
+    padding-left: 36px;
+    position: relative;
+}
+
+li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #8b7355;
+    font-size: 20px;
+}
+
+ol {
+    counter-reset: item;
+}
+
+ol li {
+    counter-increment: item;
+}
+
+ol li::before {
+    content: counter(item) ".";
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic;
+    font-size: 24px;
+    color: #8b7355;
+}
+
+strong {
+    font-weight: 600;
+    color: #1a1208;
+}
+
+em {
+    font-style: italic;
+}
+
+code {
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    background: rgba(139, 115, 85, 0.12);
+    padding: 3px 8px;
+    border-radius: 2px;
+    font-size: 0.9em;
+}
+
+pre {
+    background: rgba(139, 115, 85, 0.1);
+    padding: 24px;
+    border-left: 3px solid #8b7355;
+    margin-bottom: 28px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+blockquote {
+    border-left: 3px solid #8b7355;
+    padding-left: 28px;
+    margin-bottom: 28px;
+    font-style: italic;
+    color: #5a4a36;
+}

@@ -16,6 +16,7 @@ uv run playwright install chromium
 # Run
 export FRAME_TV_IP=192.168.1.x
 export FRAME_CONTENT_FILE=/path/to/content.md
+export FRAME_THEME=default  # optional: default, paper
 uv run frame-update
 ```
 
@@ -23,11 +24,20 @@ uv run frame-update
 
 Single-module design in `src/frame_automation/main.py`:
 
-1. **`get_config()`** - Validates `FRAME_TV_IP` and `FRAME_CONTENT_FILE` environment variables
-2. **`render_to_image(content_path, output_path)`** - Converts markdown to HTML, renders to PNG via Playwright headless Chromium
-3. **`upload_to_tv(tv_ip, image_path)`** - Uploads image via samsungtvws WebSocket API
-4. **`set_active_art(tv_ip, content_id)`** - Sets uploaded image as active artwork
-5. **`main()`** - Orchestrates workflow, handles cleanup
+1. **`get_config()`** - Validates environment variables, returns TV IP, content path, theme
+2. **`load_theme_css(theme_name)`** - Loads theme CSS, resolves relative `url()` to `file://` paths
+3. **`render_to_image(content_path, output_path, theme)`** - Converts markdown to HTML, applies theme CSS, renders to PNG
+4. **`upload_to_tv(tv_ip, image_path)`** - Uploads image via samsungtvws WebSocket API
+5. **`set_active_art(tv_ip, content_id)`** - Sets uploaded image as active artwork
+
+## Themes
+
+Themes live in `themes/` directory:
+
+- Single CSS file: `themes/default.css`
+- Folder with assets: `themes/paper/theme.css` + `themes/paper/background.jpg`
+
+Each theme is self-contained CSS with full styling control. Relative `url()` references are resolved to the theme's directory.
 
 ## Dependencies
 

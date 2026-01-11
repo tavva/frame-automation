@@ -23,7 +23,7 @@ uv run playwright install chromium
 ```bash
 export FRAME_TV_IP=192.168.1.x
 export FRAME_CONTENT_FILE=/path/to/content.md
-export FRAME_THEME=default  # optional: default, paper
+export FRAME_THEME=default  # optional, see below
 
 uv run frame-update
 ```
@@ -38,7 +38,12 @@ Themes live in the `themes/` directory. A theme is either:
 Built-in themes:
 
 - **default** - dark background, light text
-- **paper** - paper texture background with handwritten-style fonts
+- **paper** - paper texture with shadow border
+- **paper-bleed** - paper texture, full screen (no border)
+- **split** - content left, photo right, with shadow border
+- **split-bleed** - content left, photo right, full screen
+
+The split themes display a photo on the right side. Place your photo at `themes/split/user-provided/photo.jpg`.
 
 To create a custom theme, add a CSS file or folder to `themes/`. The CSS has full control over styling. Use `url(filename.jpg)` for assets relative to the theme folder.
 

@@ -2,6 +2,8 @@
 # ABOUTME: Renders markdown content to an image and uploads to Samsung Frame TV.
 # ABOUTME: Configured via FRAME_TV_IP, FRAME_CONTENT_FILE, and FRAME_THEME environment variables.
 
+import base64
+import mimetypes
 import os
 import re
 import sys
@@ -59,7 +61,7 @@ def get_config() -> tuple[str, Path, str]:
 
 
 def load_theme_css(theme_name: str) -> str:
-    """Load and process theme CSS, resolving relative URLs to file:// paths."""
+    """Load and process theme CSS, embedding local images as base64 data URIs."""
     themes_dir = get_themes_dir()
 
     # Check for folder theme first, then single file
@@ -73,15 +75,21 @@ def load_theme_css(theme_name: str) -> str:
 
     css = css_path.read_text()
 
-    # Replace relative url() references with absolute file:// paths
+    # Replace relative url() references with base64 data URIs for local images
     def resolve_url(match: re.Match) -> str:
         url = match.group(1)
         # Skip absolute URLs, data URIs, and external URLs
         if url.startswith(("http://", "https://", "data:", "file://", "/")):
             return match.group(0)
-        # Resolve relative path
+        # Resolve relative path and embed as base64
         abs_path = (base_dir / url).resolve()
-        return f"url(file://{abs_path})"
+        if abs_path.exists():
+            mime_type, _ = mimetypes.guess_type(str(abs_path))
+            if mime_type and mime_type.startswith("image/"):
+                image_data = abs_path.read_bytes()
+                b64 = base64.b64encode(image_data).decode("utf-8")
+                return f"url(data:{mime_type};base64,{b64})"
+        return match.group(0)
 
     css = re.sub(r"url\(['\"]?([^)'\"\s]+)['\"]?\)", resolve_url, css)
 

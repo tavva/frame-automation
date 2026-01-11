@@ -12,5 +12,8 @@ dependencies = [
 [project.scripts]
 frame-update = "frame_automation.main:main"
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
 [tool.uv]
 package = true

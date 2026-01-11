@@ -16,6 +16,28 @@ from samsungtvws import SamsungTVWS
 
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
+STATE_DIR = Path.home() / ".frame-automation"
+STATE_FILE = "last_content_id"
+
+
+def get_state_file_path() -> Path:
+    """Return path to the state file storing the last uploaded content ID."""
+    return STATE_DIR / STATE_FILE
+
+
+def read_last_content_id() -> str | None:
+    """Read the last uploaded content ID from state file, or None if not found."""
+    state_file = get_state_file_path()
+    if not state_file.exists():
+        return None
+    return state_file.read_text().strip()
+
+
+def write_last_content_id(content_id: str) -> None:
+    """Write the content ID to state file for future cleanup."""
+    state_file = get_state_file_path()
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(content_id)
 
 
 def get_repo_root() -> Path:
@@ -153,6 +175,22 @@ def set_active_art(tv_ip: str, content_id: str) -> None:
     art.select_image(content_id)
 
 
+def delete_previous_art(tv_ip: str) -> None:
+    """Delete the previously uploaded image from the TV if one exists."""
+    previous_id = read_last_content_id()
+    if not previous_id:
+        return
+
+    tv = SamsungTVWS(tv_ip)
+    art = tv.art()
+    try:
+        art.delete(previous_id)
+        print(f"  Deleted previous image: {previous_id}")
+    except Exception as e:
+        # Image may have been manually deleted - not an error
+        print(f"  Could not delete previous image {previous_id}: {e}")
+
+
 def main():
     tv_ip, content_file, theme = get_config()
 
@@ -163,6 +201,9 @@ def main():
     render_to_image(content_file, image_path, theme)
     print(f"  Saved to {image_path}")
 
+    print("Cleaning up previous image...")
+    delete_previous_art(tv_ip)
+
     print(f"Uploading to TV ({tv_ip})...")
     content_id = upload_to_tv(tv_ip, image_path)
     print(f"  Content ID: {content_id}")
@@ -170,6 +211,7 @@ def main():
     print("Setting as active artwork...")
     set_active_art(tv_ip, content_id)
 
+    write_last_content_id(content_id)
     print("Done!")
 
     # Clean up temp file

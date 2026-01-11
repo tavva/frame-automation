@@ -16,7 +16,7 @@ body {
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 65px 75px;
 }

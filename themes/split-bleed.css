@@ -18,7 +18,7 @@ body {
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     padding: 80px 100px;
     gap: 80px;
 }
@@ -26,6 +26,7 @@ body {
 body::after {
     content: "";
     flex: 0 0 auto;
+    align-self: center;
     width: 480px;
     height: 640px;
     margin-left: auto;

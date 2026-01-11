@@ -16,7 +16,7 @@ body {
     color: #2c2416;
     font-family: 'Lora', Georgia, serif;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     padding: 65px 75px;
     gap: 50px;
     position: relative;
@@ -41,6 +41,7 @@ body::before {
 body::after {
     content: "";
     flex: 0 0 auto;
+    align-self: center;
     width: 480px;
     height: 640px;
     margin-left: auto;

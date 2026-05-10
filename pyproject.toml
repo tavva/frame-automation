@@ -20,7 +20,7 @@ frame-off = "frame_automation.main:main_off"
 frame-art = "frame_automation.main:main_art"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=9.0.3"]
 
 [tool.uv]
 package = true

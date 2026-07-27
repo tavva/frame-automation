@@ -240,7 +240,12 @@ def ensure_art_mode(tv_ip: str, mac: str | None = None) -> None:
             # Test connection first - this will fail fast if TV is off
             tv = SamsungTVWS(tv_ip, port=8002, timeout=5, token_file=get_token_file_path())
             art = tv.art()
-            art.get_artmode()  # Quick check that TV is responsive
+            artmode = art.get_artmode()  # Quick check that TV is responsive
+
+            # The TV sends no reply to set_artmode when it is already in art
+            # mode, leaving the websocket read to block until it times out
+            if artmode == "on":
+                return
 
             # TV is responding - now set art mode
             # Run in thread with timeout since it may block waiting for response

@@ -190,6 +190,33 @@ class TestMainCleanup:
 class TestEnsureArtMode:
     """Tests for the ensure_art_mode function."""
 
+    def test_ensure_art_mode_skips_set_when_already_in_art_mode(self, monkeypatch):
+        """The TV sends no reply to set_artmode when it is already on, so the
+        websocket read blocks until it times out. Skip the redundant call."""
+        from frame_automation.main import ensure_art_mode
+
+        art_mode_calls = []
+
+        class MockArt:
+            def get_artmode(self):
+                return "on"
+
+            def set_artmode(self, mode):
+                art_mode_calls.append(mode)
+
+        class MockTV:
+            def __init__(self, host, port=8001, timeout=None, token_file=None):
+                pass
+
+            def art(self):
+                return MockArt()
+
+        monkeypatch.setattr("frame_automation.main.SamsungTVWS", MockTV)
+
+        ensure_art_mode("192.168.1.100")
+
+        assert art_mode_calls == []
+
     def test_ensure_art_mode_sets_art_mode_on(self, monkeypatch):
         """Should call set_artmode(True) via the art API."""
         from frame_automation.main import ensure_art_mode
@@ -198,7 +225,7 @@ class TestEnsureArtMode:
 
         class MockArt:
             def get_artmode(self):
-                return "on"
+                return "off"
 
             def set_artmode(self, mode):
                 art_mode_calls.append(mode)
@@ -228,7 +255,7 @@ class TestEnsureArtMode:
 
         class MockArt:
             def get_artmode(self):
-                return "on"
+                return "off"
 
             def set_artmode(self, mode):
                 art_mode_calls.append(mode)
@@ -265,7 +292,7 @@ class TestEnsureArtMode:
 
         class MockArt:
             def get_artmode(self):
-                return "on"
+                return "off"
 
             def set_artmode(self, mode):
                 connection_attempts.append("art_mode")

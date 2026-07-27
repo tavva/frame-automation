@@ -155,6 +155,38 @@ class TestMainOrdering:
         assert calls.index("delete_previous") < calls.index("write_state")
 
 
+class TestMainCleanup:
+    """Tests for temporary file handling in main."""
+
+    def test_rendered_image_is_removed_when_upload_fails(self, monkeypatch, tmp_path):
+        """A failed run must not leave rendered images behind."""
+        from frame_automation import main as main_module
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("# Hello")
+        rendered = []
+
+        monkeypatch.setattr(
+            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
+        )
+        monkeypatch.setattr(
+            main_module,
+            "render_to_image",
+            lambda content, output, theme: rendered.append(output),
+        )
+
+        def fail_to_upload(tv_ip, image_path):
+            raise ConnectionError("TV unreachable")
+
+        monkeypatch.setattr(main_module, "upload_to_tv", fail_to_upload)
+
+        with pytest.raises(ConnectionError):
+            main_module.main()
+
+        assert rendered, "render_to_image was never called"
+        assert not rendered[0].exists()
+
+
 class TestEnsureArtMode:
     """Tests for the ensure_art_mode function."""
 

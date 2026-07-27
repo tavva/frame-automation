@@ -309,27 +309,27 @@ def main():
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         image_path = Path(f.name)
 
-    print(f"Rendering image (theme: {theme})...")
-    render_to_image(content_file, image_path, theme)
-    print(f"  Saved to {image_path}")
+    try:
+        print(f"Rendering image (theme: {theme})...")
+        render_to_image(content_file, image_path, theme)
+        print(f"  Saved to {image_path}")
 
-    print(f"Uploading to TV ({tv_ip})...")
-    content_id = upload_to_tv(tv_ip, image_path)
-    print(f"  Content ID: {content_id}")
+        print(f"Uploading to TV ({tv_ip})...")
+        content_id = upload_to_tv(tv_ip, image_path)
+        print(f"  Content ID: {content_id}")
 
-    print("Setting as active artwork...")
-    set_active_art(tv_ip, content_id)
+        print("Setting as active artwork...")
+        set_active_art(tv_ip, content_id)
 
-    # Delete only once the replacement is live, so a failure never leaves the TV
-    # without artwork
-    print("Cleaning up previous image...")
-    delete_previous_art(tv_ip)
+        # Delete only once the replacement is live, so a failure never leaves the TV
+        # without artwork
+        print("Cleaning up previous image...")
+        delete_previous_art(tv_ip)
 
-    write_last_content_id(content_id)
-    print("Done!")
-
-    # Clean up temp file
-    image_path.unlink()
+        write_last_content_id(content_id)
+        print("Done!")
+    finally:
+        image_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

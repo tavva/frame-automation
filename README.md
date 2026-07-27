@@ -2,7 +2,7 @@
 
 Display markdown content on a Samsung Frame TV in Art Mode. Note that I've only tested this on an old Frame, I believe this won't work with newer models.
 
-Watches a markdown file for changes, renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
+Reads a markdown file, renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
 
 <p align="center">
   <img src="docs/assets/demo-screenshot.jpg" alt="Rendered output" width="600">
@@ -22,9 +22,12 @@ Watches a markdown file for changes, renders it to a styled 1920×1080 image (I 
 ```bash
 git clone git@github.com:tavva/frame-automation.git
 cd frame-automation
-uv sync
+uv sync --extra render
 uv run playwright install chromium
 ```
+
+The `render` extra pulls in markdown and Playwright. Without it only the power
+control commands work; `uv sync` on its own is enough for those.
 
 ## Usage
 
@@ -34,6 +37,16 @@ export FRAME_CONTENT_FILE=/path/to/content.md
 export FRAME_THEME=default  # optional, see below
 
 uv run frame-update
+```
+
+### Power control
+
+```bash
+export FRAME_TV_IP=192.168.1.x
+export FRAME_TV_MAC=aa:bb:cc:dd:ee:ff  # optional, enables Wake-on-LAN
+
+uv run frame-art  # switch to art mode, waking the TV first if MAC is set
+uv run frame-off  # turn the TV off
 ```
 
 ## Themes

@@ -107,6 +107,54 @@ class TestTurnOff:
         assert held_keys == [("KEY_POWER", 3)]
 
 
+class TestMainOrdering:
+    """Tests for the order of operations in main."""
+
+    def test_previous_art_is_deleted_only_after_new_image_is_active(
+        self, monkeypatch, tmp_path
+    ):
+        """The TV must never be left without artwork if a step fails."""
+        from frame_automation import main as main_module
+
+        calls = []
+        content_file = tmp_path / "content.md"
+        content_file.write_text("# Hello")
+
+        monkeypatch.setattr(
+            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
+        )
+        monkeypatch.setattr(
+            main_module,
+            "render_to_image",
+            lambda content, output, theme: calls.append("render"),
+        )
+        monkeypatch.setattr(
+            main_module,
+            "delete_previous_art",
+            lambda tv_ip: calls.append("delete_previous"),
+        )
+        monkeypatch.setattr(
+            main_module,
+            "upload_to_tv",
+            lambda tv_ip, path: (calls.append("upload"), "MY_F0002")[1],
+        )
+        monkeypatch.setattr(
+            main_module,
+            "set_active_art",
+            lambda tv_ip, content_id: calls.append("set_active"),
+        )
+        monkeypatch.setattr(
+            main_module,
+            "write_last_content_id",
+            lambda content_id: calls.append("write_state"),
+        )
+
+        main_module.main()
+
+        assert calls.index("delete_previous") > calls.index("set_active")
+        assert calls.index("delete_previous") < calls.index("write_state")
+
+
 class TestEnsureArtMode:
     """Tests for the ensure_art_mode function."""
 

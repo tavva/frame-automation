@@ -308,6 +308,46 @@ def main_art():
     os._exit(0)
 
 
+def publish_image(tv_ip: str, image_path: Path) -> None:
+    """Upload an image, make it the active artwork and remove the previous one."""
+    print(f"Uploading to TV ({tv_ip})...")
+    content_id = upload_to_tv(tv_ip, image_path)
+    print(f"  Content ID: {content_id}")
+
+    print("Setting as active artwork...")
+    set_active_art(tv_ip, content_id)
+
+    # Delete only once the replacement is live, so a failure never leaves the TV
+    # without artwork
+    print("Cleaning up previous image...")
+    delete_previous_art(tv_ip)
+
+    write_last_content_id(content_id)
+
+
+def get_image_argument() -> Path:
+    """Read the image path from the command line."""
+    if len(sys.argv) != 2:
+        sys.exit("Usage: frame-image <path-to-png>")
+
+    image_path = Path(sys.argv[1])
+    if not image_path.exists():
+        sys.exit(f"Error: Image file not found: {image_path}")
+    if image_path.suffix.lower() != ".png":
+        sys.exit(f"Error: Only PNG images are supported, got: {image_path.name}")
+
+    return image_path
+
+
+def main_image():
+    """CLI entry point to display an existing PNG on the TV."""
+    tv_ip = get_tv_ip()
+    image_path = get_image_argument()
+
+    publish_image(tv_ip, image_path)
+    print("Done!")
+
+
 def main():
     tv_ip, content_file, theme = get_config()
 
@@ -319,19 +359,7 @@ def main():
         render_to_image(content_file, image_path, theme)
         print(f"  Saved to {image_path}")
 
-        print(f"Uploading to TV ({tv_ip})...")
-        content_id = upload_to_tv(tv_ip, image_path)
-        print(f"  Content ID: {content_id}")
-
-        print("Setting as active artwork...")
-        set_active_art(tv_ip, content_id)
-
-        # Delete only once the replacement is live, so a failure never leaves the TV
-        # without artwork
-        print("Cleaning up previous image...")
-        delete_previous_art(tv_ip)
-
-        write_last_content_id(content_id)
+        publish_image(tv_ip, image_path)
         print("Done!")
     finally:
         image_path.unlink(missing_ok=True)

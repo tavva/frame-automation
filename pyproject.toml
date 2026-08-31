@@ -16,6 +16,7 @@ render = [
 
 [project.scripts]
 frame-update = "frame_automation.main:main"
+frame-image = "frame_automation.main:main_image"
 frame-off = "frame_automation.main:main_off"
 frame-art = "frame_automation.main:main_art"
 

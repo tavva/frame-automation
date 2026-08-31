@@ -26,8 +26,9 @@ uv sync --extra render
 uv run playwright install chromium
 ```
 
-The `render` extra pulls in markdown and Playwright. Without it only the power
-control commands work; `uv sync` on its own is enough for those.
+The `render` extra pulls in markdown and Playwright. Without it only
+`frame-image` and the power control commands work; `uv sync` on its own is
+enough for those.
 
 ## Usage
 
@@ -38,6 +39,18 @@ export FRAME_THEME=default  # optional, see below
 
 uv run frame-update
 ```
+
+### Sending an existing image
+
+```bash
+export FRAME_TV_IP=192.168.1.x
+
+uv run frame-image /path/to/image.png
+```
+
+Uploads a PNG as-is, skipping the markdown render, so it needs no `render`
+extra. The image should be 1920x1080. It replaces the previously uploaded
+image just as `frame-update` does.
 
 ### Power control
 

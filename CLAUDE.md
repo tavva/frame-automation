@@ -19,6 +19,9 @@ export FRAME_CONTENT_FILE=/path/to/content.md
 export FRAME_THEME=default  # optional: default, paper, paper-bleed, split, split-bleed
 uv run frame-update
 
+# Send an existing PNG (no render extra needed)
+uv run frame-image /path/to/image.png
+
 # Power control (needs FRAME_TV_IP, optionally FRAME_TV_MAC for Wake-on-LAN)
 uv run frame-art
 uv run frame-off
@@ -39,9 +42,11 @@ Single-module design in `src/frame_automation/main.py`:
 6. **`delete_previous_art(tv_ip)`** - Removes the image uploaded by the previous run, tracked in `~/.frame-automation/last_content_id`
 7. **`ensure_art_mode(tv_ip, mac)`** - Switches to art mode, sending Wake-on-LAN packets and retrying when a MAC is given
 8. **`turn_off(tv_ip)`** - Powers the TV off by holding `KEY_POWER`
+9. **`publish_image(tv_ip, image_path)`** - Uploads an image, activates it and deletes the previous one; shared by `frame-update` and `frame-image`
 
-`main()` uploads and activates the new image before deleting the previous one,
-so a failure part way through never leaves the TV without artwork.
+`publish_image()` uploads and activates the new image before deleting the
+previous one, so a failure part way through never leaves the TV without
+artwork.
 
 ## Themes
 

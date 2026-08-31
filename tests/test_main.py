@@ -318,3 +318,106 @@ class TestEnsureArtMode:
         # Should have sent WoL packets (3 per attempt, 2 attempts)
         assert len(wol_calls) == 6
         assert "art_mode" in connection_attempts
+
+
+class TestSendImage:
+    """Tests for sending an existing image file to the TV."""
+
+    def _patch_upload_chain(self, monkeypatch, calls):
+        from frame_automation import main as main_module
+
+        monkeypatch.setattr(
+            main_module,
+            "upload_to_tv",
+            lambda tv_ip, path: (calls.append(("upload", path)), "MY_F0003")[1],
+        )
+        monkeypatch.setattr(
+            main_module,
+            "set_active_art",
+            lambda tv_ip, content_id: calls.append(("set_active", content_id)),
+        )
+        monkeypatch.setattr(
+            main_module,
+            "delete_previous_art",
+            lambda tv_ip: calls.append(("delete_previous", None)),
+        )
+        monkeypatch.setattr(
+            main_module,
+            "write_last_content_id",
+            lambda content_id: calls.append(("write_state", content_id)),
+        )
+
+    def test_uploads_the_given_image_and_makes_it_active(self, monkeypatch, tmp_path):
+        """The named file should be uploaded and selected as the artwork."""
+        from frame_automation import main as main_module
+
+        image = tmp_path / "artwork.png"
+        image.write_bytes(b"fake png")
+        calls = []
+        self._patch_upload_chain(monkeypatch, calls)
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setattr("sys.argv", ["frame-image", str(image)])
+
+        main_module.main_image()
+
+        assert ("upload", image) in calls
+        assert ("set_active", "MY_F0003") in calls
+        assert ("write_state", "MY_F0003") in calls
+
+    def test_previous_art_is_deleted_only_after_new_image_is_active(
+        self, monkeypatch, tmp_path
+    ):
+        """The TV must never be left without artwork if a step fails."""
+        from frame_automation import main as main_module
+
+        image = tmp_path / "artwork.png"
+        image.write_bytes(b"fake png")
+        calls = []
+        self._patch_upload_chain(monkeypatch, calls)
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setattr("sys.argv", ["frame-image", str(image)])
+
+        main_module.main_image()
+
+        names = [name for name, _ in calls]
+        assert names.index("delete_previous") > names.index("set_active")
+        assert names.index("delete_previous") < names.index("write_state")
+
+    def test_exits_when_no_image_path_given(self, monkeypatch):
+        """Should explain usage rather than fail obscurely."""
+        from frame_automation import main as main_module
+
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setattr("sys.argv", ["frame-image"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main_module.main_image()
+
+        assert "Usage" in str(excinfo.value)
+
+    def test_exits_when_image_file_missing(self, monkeypatch, tmp_path):
+        """Should report a missing file before contacting the TV."""
+        from frame_automation import main as main_module
+
+        missing = tmp_path / "nothing-here.png"
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setattr("sys.argv", ["frame-image", str(missing)])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main_module.main_image()
+
+        assert "not found" in str(excinfo.value)
+
+    def test_exits_when_image_is_not_a_png(self, monkeypatch, tmp_path):
+        """Uploads are sent as PNG, so other formats must be rejected."""
+        from frame_automation import main as main_module
+
+        image = tmp_path / "artwork.jpg"
+        image.write_bytes(b"fake jpeg")
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setattr("sys.argv", ["frame-image", str(image)])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main_module.main_image()
+
+        assert "PNG" in str(excinfo.value)

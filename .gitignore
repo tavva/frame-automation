@@ -6,3 +6,8 @@ __pycache__/
 # User-provided theme assets
 themes/*/user-provided/
 user-themes/
+
+# direnv
+.direnv/
+.env
+.envrc

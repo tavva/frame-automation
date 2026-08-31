@@ -35,7 +35,7 @@ enough for those.
 ```bash
 export FRAME_TV_IP=192.168.1.x
 export FRAME_CONTENT_FILE=/path/to/content.md
-export FRAME_THEME=default  # optional, see below
+export FRAME_THEME=goals  # optional, see below
 
 uv run frame-update
 ```
@@ -66,18 +66,34 @@ uv run frame-off  # turn the TV off
 
 Themes live in the `themes/` directory. A theme is either:
 
-- A single CSS file: `themes/default.css`
+- A single CSS file: `themes/goals.css`
 - A folder with assets: `themes/paper/theme.css` + `themes/paper/background.jpg`
 
 Built-in themes:
 
-- **default** - dark background, light text
+- **goals** - sage display for a numbered goal list (the default)
+- **dark** - dark background, light text
 - **paper** - paper texture with shadow border
 - **paper-bleed** - paper texture, full screen (no border)
 - **split** - content left, photo right, with shadow border
 - **split-bleed** - content left, photo right, full screen
 
 The split themes display a photo on the right side. Place your photo at `themes/split/user-provided/photo.jpg`.
+
+The **goals** theme numbers each `###` heading `01`, `02`, ... and lays its
+list items out as sub-goals. Put the date in an `h2` to have it sit at the top
+right, opposite the title:
+
+```markdown
+# Goals
+## August 31 2026
+
+### First goal
+- A sub-goal
+```
+
+A single `# Goals - August 31 2026` also works; the whole line then runs along
+the left of the rule.
 
 To create a custom theme, add a CSS file or folder to `themes/`. The CSS has full control over styling. Use `url(filename.jpg)` for assets relative to the theme folder.
 

@@ -421,3 +421,21 @@ class TestSendImage:
             main_module.main_image()
 
         assert "PNG" in str(excinfo.value)
+
+
+class TestDefaultTheme:
+    """Tests for the theme used when FRAME_THEME is not set."""
+
+    def test_get_config_defaults_to_the_goals_theme(self, monkeypatch, tmp_path):
+        """An unset FRAME_THEME should render the goals design."""
+        from frame_automation.main import get_config
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("# Goals")
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_THEME", raising=False)
+
+        _, _, theme = get_config()
+
+        assert theme == "goals"

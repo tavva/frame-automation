@@ -16,7 +16,7 @@ uv run playwright install chromium
 # Run
 export FRAME_TV_IP=192.168.1.x
 export FRAME_CONTENT_FILE=/path/to/content.md
-export FRAME_THEME=default  # optional: default, paper, paper-bleed, split, split-bleed
+export FRAME_THEME=goals  # optional: goals (default), dark, paper, paper-bleed, split, split-bleed
 uv run frame-update
 
 # Send an existing PNG (no render extra needed)
@@ -52,7 +52,7 @@ artwork.
 
 Themes live in `themes/` directory:
 
-- Single CSS file: `themes/default.css`
+- Single CSS file: `themes/goals.css`
 - Folder with assets: `themes/paper/theme.css` + `themes/paper/background.jpg`
 
 Each theme is self-contained CSS with full styling control. Relative `url()` references are resolved to the theme's directory.

@@ -15,7 +15,7 @@ body {
     background: #c9d2c4;
     color: #171d18;
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-    padding: 76px 96px 64px;
+    padding: 130px 96px 120px;
 }
 
 .container {
@@ -25,7 +25,7 @@ body {
     flex-direction: column;
     justify-content: center;
     /* Clear the header and the closing rule, both taken out of the flow */
-    padding: 79px 0 23px;
+    padding: 103px 0 47px;
     counter-reset: goal;
 }
 
@@ -71,16 +71,20 @@ h2 {
     margin-right: -0.22em;
 }
 
+h3, ul, ol, p, pre, blockquote {
+    zoom: var(--fit-scale, 1);
+    width: calc(100% / var(--fit-scale, 1));
+}
+
 h3 {
     counter-increment: goal;
     position: relative;
-    max-width: 1450px;
     padding-left: 118px;
     font-size: 78px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: -0.028em;
-    text-wrap: balance;
+    text-wrap: pretty;
 }
 
 h3::before {
@@ -96,12 +100,12 @@ h3::before {
 }
 
 h3 ~ h3 {
-    margin-top: 76px;
+    margin-top: 72px;
 }
 
 ul, ol {
     padding-left: 118px;
-    margin-top: 32px;
+    margin-top: 26px;
     list-style: none;
 }
 
@@ -110,12 +114,12 @@ li {
     padding-left: 44px;
     font-size: 42px;
     font-weight: 400;
-    line-height: 1.25;
+    line-height: 1.2;
     color: #2c352d;
 }
 
 li + li {
-    margin-top: 14px;
+    margin-top: 16px;
 }
 
 ul li::before {
@@ -146,7 +150,7 @@ ol li::before {
 
 p {
     max-width: 1450px;
-    margin-top: 32px;
+    margin-top: 26px;
     padding-left: 118px;
     font-size: 42px;
     line-height: 1.35;

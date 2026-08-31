@@ -95,6 +95,9 @@ right, opposite the title:
 A single `# Goals - August 31 2026` also works; the whole line then runs along
 the left of the rule.
 
+Goals shrink to fit the frame as you add more of them, down to a quarter of
+their designed size. The header and the rules stay put.
+
 To create a custom theme, add a CSS file or folder to `themes/`. The CSS has full control over styling. Use `url(filename.jpg)` for assets relative to the theme folder.
 
 ## Content

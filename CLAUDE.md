@@ -36,13 +36,15 @@ Single-module design in `src/frame_automation/main.py`:
 
 1. **`get_config()`** - Validates environment variables, returns TV IP, content path, theme
 2. **`load_theme_css(theme_name)`** - Loads theme CSS, embedding relative `url()` images as base64 data URIs
-3. **`render_to_image(content_path, output_path, theme)`** - Converts markdown to HTML, applies theme CSS, renders to PNG
-4. **`upload_to_tv(tv_ip, image_path)`** - Uploads image via samsungtvws WebSocket API
-5. **`set_active_art(tv_ip, content_id)`** - Sets uploaded image as active artwork
-6. **`delete_previous_art(tv_ip)`** - Removes the image uploaded by the previous run, tracked in `~/.frame-automation/last_content_id`
-7. **`ensure_art_mode(tv_ip, mac)`** - Switches to art mode, sending Wake-on-LAN packets and retrying when a MAC is given
-8. **`turn_off(tv_ip)`** - Powers the TV off by holding `KEY_POWER`
-9. **`publish_image(tv_ip, image_path)`** - Uploads an image, activates it and deletes the previous one; shared by `frame-update` and `frame-image`
+3. **`build_page_html(markdown_text, theme)`** - Converts markdown to HTML and wraps it in a page styled with the theme CSS
+4. **`fit_to_frame(page)`** - Measures the rendered content and publishes `--fit-scale` on the container, so themes that size themselves with it shrink to fit
+5. **`render_to_image(content_path, output_path, theme)`** - Renders the fitted page to PNG
+6. **`upload_to_tv(tv_ip, image_path)`** - Uploads image via samsungtvws WebSocket API
+7. **`set_active_art(tv_ip, content_id)`** - Sets uploaded image as active artwork
+8. **`delete_previous_art(tv_ip)`** - Removes the image uploaded by the previous run, tracked in `~/.frame-automation/last_content_id`
+9. **`ensure_art_mode(tv_ip, mac)`** - Switches to art mode, sending Wake-on-LAN packets and retrying when a MAC is given
+10. **`turn_off(tv_ip)`** - Powers the TV off by holding `KEY_POWER`
+11. **`publish_image(tv_ip, image_path)`** - Uploads an image, activates it and deletes the previous one; shared by `frame-update` and `frame-image`
 
 `publish_image()` uploads and activates the new image before deleting the
 previous one, so a failure part way through never leaves the TV without

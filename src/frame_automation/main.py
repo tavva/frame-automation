@@ -21,6 +21,8 @@ IMAGE_HEIGHT = 1080
 STATE_DIR = Path.home() / ".frame-automation"
 STATE_FILE = "last_content_id"
 TOKEN_FILE = "tv_token"
+FIT_MAX_PASSES = 12  # Scaling changes wrapping, so measuring repeats until settled
+FIT_MIN_SCALE = 0.25  # Floor on shrinking, below which content is unreadable
 WAKE_RETRY_DELAY = 5  # Seconds between retries when waiting for TV to wake
 WAKE_MAX_RETRIES = 12  # Max attempts (12 * 5s = 60s timeout)
 
@@ -133,16 +135,14 @@ def load_theme_css(theme_name: str) -> str:
     return css
 
 
-def render_to_image(content_path: Path, output_path: Path, theme: str) -> None:
-    """Render markdown content to image file."""
+def build_page_html(markdown_text: str, theme: str) -> str:
+    """Convert markdown to a full HTML page styled with the theme."""
     import markdown
-    from playwright.sync_api import sync_playwright
 
-    markdown_text = content_path.read_text()
     content_html = markdown.markdown(markdown_text)
     theme_css = load_theme_css(theme)
 
-    html = f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -156,10 +156,63 @@ def render_to_image(content_path: Path, output_path: Path, theme: str) -> None:
 </body>
 </html>"""
 
+
+def fit_to_frame(page) -> float:
+    """Shrink the content until it fits the frame, returning the scale used.
+
+    Themes opt in by sizing their content with `var(--fit-scale)`; the scale is
+    published on the container and never grows past 1, so content that already
+    fits is left at its designed size. Each pass changes how text wraps, so the
+    measurement repeats until it settles.
+    """
+    page.evaluate("async () => { await document.fonts.ready; }")
+    return page.evaluate(
+        """() => {
+    const container = document.querySelector('.container');
+    const flow = [...container.children].filter(
+        (child) => getComputedStyle(child).position !== 'absolute'
+    );
+    if (!flow.length) return 1;
+
+    const style = getComputedStyle(container);
+    const available = container.clientHeight
+        - parseFloat(style.paddingTop)
+        - parseFloat(style.paddingBottom);
+
+    let scale = 1;
+    for (let pass = 0; pass < FIT_MAX_PASSES; pass++) {
+        const rects = flow.map((child) => child.getBoundingClientRect());
+        const height = Math.max(...rects.map((r) => r.bottom))
+            - Math.min(...rects.map((r) => r.top));
+        if (available <= 0 || height <= 0) break;
+
+        const fitted = scale * available / height;
+        const next = Math.max(
+            FIT_MIN_SCALE, Math.min(1, Math.floor(fitted * 200) / 200)
+        );
+        if (Math.abs(next - scale) <= 0.006) break;
+
+        scale = next;
+        container.style.setProperty('--fit-scale', scale);
+    }
+    return scale;
+}"""
+        .replace("FIT_MAX_PASSES", str(FIT_MAX_PASSES))
+        .replace("FIT_MIN_SCALE", str(FIT_MIN_SCALE))
+    )
+
+
+def render_to_image(content_path: Path, output_path: Path, theme: str) -> None:
+    """Render markdown content to image file."""
+    from playwright.sync_api import sync_playwright
+
+    html = build_page_html(content_path.read_text(), theme)
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": IMAGE_WIDTH, "height": IMAGE_HEIGHT})
         page.set_content(html)
+        fit_to_frame(page)
         page.screenshot(path=str(output_path), type="png")
         browser.close()
 

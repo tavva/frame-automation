@@ -439,3 +439,50 @@ class TestDefaultTheme:
         _, _, theme = get_config()
 
         assert theme == "clean"
+
+
+class TestFitToFrame:
+    """Tests for scaling content down to fit the fixed 1920x1080 frame."""
+
+    def _scale_for(self, markdown_text):
+        from playwright.sync_api import sync_playwright
+
+        from frame_automation.main import (
+            IMAGE_HEIGHT,
+            IMAGE_WIDTH,
+            build_page_html,
+            fit_to_frame,
+        )
+
+        html = build_page_html(markdown_text, "clean")
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(
+                viewport={"width": IMAGE_WIDTH, "height": IMAGE_HEIGHT}
+            )
+            page.set_content(html)
+            scale = fit_to_frame(page)
+            browser.close()
+        return scale
+
+    def test_content_that_already_fits_is_left_alone(self):
+        """Short content must not be scaled up or down."""
+        pytest.importorskip("playwright")
+
+        scale = self._scale_for("# Goals\n## Today\n\n### One goal\n- One item")
+
+        assert scale == 1.0
+
+    def test_overflowing_content_is_scaled_down(self):
+        """Content taller than the frame must shrink to fit."""
+        pytest.importorskip("playwright")
+
+        goals = "\n\n".join(
+            f"### Goal number {n} with a reasonably long title\n"
+            "- First item\n- Second item\n- Third item"
+            for n in range(1, 8)
+        )
+
+        scale = self._scale_for(f"# Goals\n## Today\n\n{goals}")
+
+        assert 0.25 <= scale < 1.0

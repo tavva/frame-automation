@@ -426,8 +426,8 @@ class TestSendImage:
 class TestDefaultTheme:
     """Tests for the theme used when FRAME_THEME is not set."""
 
-    def test_get_config_defaults_to_the_goals_theme(self, monkeypatch, tmp_path):
-        """An unset FRAME_THEME should render the goals design."""
+    def test_get_config_defaults_to_the_clean_theme(self, monkeypatch, tmp_path):
+        """An unset FRAME_THEME should render the clean design."""
         from frame_automation.main import get_config
 
         content_file = tmp_path / "content.md"
@@ -438,4 +438,4 @@ class TestDefaultTheme:
 
         _, _, theme = get_config()
 
-        assert theme == "goals"
+        assert theme == "clean"

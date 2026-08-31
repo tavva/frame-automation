@@ -35,7 +35,7 @@ enough for those.
 ```bash
 export FRAME_TV_IP=192.168.1.x
 export FRAME_CONTENT_FILE=/path/to/content.md
-export FRAME_THEME=goals  # optional, see below
+export FRAME_THEME=clean  # optional, see below
 
 uv run frame-update
 ```
@@ -66,12 +66,12 @@ uv run frame-off  # turn the TV off
 
 Themes live in the `themes/` directory. A theme is either:
 
-- A single CSS file: `themes/goals.css`
+- A single CSS file: `themes/clean.css`
 - A folder with assets: `themes/paper/theme.css` + `themes/paper/background.jpg`
 
 Built-in themes:
 
-- **goals** - sage display for a numbered goal list (the default)
+- **clean** - sage background, oversized type, numbered items (the default)
 - **dark** - dark background, light text
 - **paper** - paper texture with shadow border
 - **paper-bleed** - paper texture, full screen (no border)
@@ -80,8 +80,8 @@ Built-in themes:
 
 The split themes display a photo on the right side. Place your photo at `themes/split/user-provided/photo.jpg`.
 
-The **goals** theme numbers each `###` heading `01`, `02`, ... and lays its
-list items out as sub-goals. Put the date in an `h2` to have it sit at the top
+The **clean** theme numbers each `###` heading `01`, `02`, ... and lays its
+list items out as sub-items. Put the date in an `h2` to have it sit at the top
 right, opposite the title:
 
 ```markdown

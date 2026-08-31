@@ -74,7 +74,7 @@ def get_config() -> tuple[str, Path, str]:
     """Read configuration from environment variables."""
     tv_ip = os.environ.get("FRAME_TV_IP")
     content_file = os.environ.get("FRAME_CONTENT_FILE")
-    theme = os.environ.get("FRAME_THEME", "goals")
+    theme = os.environ.get("FRAME_THEME", "clean")
 
     if not tv_ip:
         sys.exit("Error: FRAME_TV_IP environment variable not set")

@@ -3,6 +3,7 @@
 # ABOUTME: Configured via FRAME_TV_IP, FRAME_CONTENT_FILE, and FRAME_THEME environment variables.
 
 import base64
+import hashlib
 import mimetypes
 import os
 import re
@@ -20,6 +21,7 @@ IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
 STATE_DIR = Path.home() / ".frame-automation"
 STATE_FILE = "last_content_id"
+WATCH_STATE_FILE = "last_content_sha256"
 TOKEN_FILE = "tv_token"
 FIT_MAX_PASSES = 12  # Scaling changes wrapping, so measuring repeats until settled
 FIT_MIN_SCALE = 0.25  # Floor on shrinking, below which content is unreadable
@@ -27,9 +29,95 @@ WAKE_RETRY_DELAY = 5  # Seconds between retries when waiting for TV to wake
 WAKE_MAX_RETRIES = 12  # Max attempts (12 * 5s = 60s timeout)
 
 
+class ContentWatcher:
+    """Publish a content file after it has remained unchanged for a while."""
+
+    def __init__(
+        self,
+        content_path: Path,
+        publish,
+        *,
+        state_file: Path,
+        clock=time.monotonic,
+        debounce_seconds: float = 10,
+        retry_seconds: float = 300,
+    ):
+        self.content_path = content_path
+        self.publish = publish
+        self.state_file = state_file
+        self.clock = clock
+        self.debounce_seconds = debounce_seconds
+        self.retry_seconds = retry_seconds
+        self.published_digest = (
+            state_file.read_text().strip() if state_file.exists() else None
+        )
+        self.observed_digest = None
+        self.pending_digest = None
+        self.deadline = None
+
+    def poll(self) -> None:
+        if not self.content_path.exists():
+            return
+
+        try:
+            content = self.content_path.read_bytes()
+        except FileNotFoundError:
+            return
+
+        digest = hashlib.sha256(content).hexdigest()
+        now = self.clock()
+        if digest != self.observed_digest:
+            self.observed_digest = digest
+            if digest == self.published_digest:
+                self.pending_digest = None
+                self.deadline = None
+            else:
+                self.pending_digest = digest
+                self.deadline = now + self.debounce_seconds
+
+        if self.pending_digest is None or now < self.deadline:
+            return
+
+        try:
+            self.publish()
+        except Exception as error:
+            print(
+                f"Update failed; retrying in {self.retry_seconds:g}s: {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+            self.deadline = now + self.retry_seconds
+            return
+
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.state_file.write_text(self.pending_digest)
+        self.published_digest = self.pending_digest
+        self.pending_digest = None
+        self.deadline = None
+
+
+def watch_content(
+    content_path: Path,
+    publish,
+    *,
+    state_file: Path,
+    sleep=time.sleep,
+) -> None:
+    """Watch a content file forever, polling it once per second."""
+    watcher = ContentWatcher(content_path, publish, state_file=state_file)
+    while True:
+        watcher.poll()
+        sleep(1)
+
+
 def get_state_file_path() -> Path:
     """Return path to the state file storing the last uploaded content ID."""
     return STATE_DIR / STATE_FILE
+
+
+def get_watch_state_file_path() -> Path:
+    """Return the path storing the last successfully published content digest."""
+    return STATE_DIR / WATCH_STATE_FILE
 
 
 def read_last_content_id() -> str | None:
@@ -401,9 +489,8 @@ def main_image():
     print("Done!")
 
 
-def main():
-    tv_ip, content_file, theme = get_config()
-
+def update_content(tv_ip: str, content_file: Path, theme: str) -> None:
+    """Render and publish one version of a configured markdown file."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         image_path = Path(f.name)
 
@@ -416,6 +503,22 @@ def main():
         print("Done!")
     finally:
         image_path.unlink(missing_ok=True)
+
+
+def main_watch() -> None:
+    """CLI entry point that publishes the content file after settled changes."""
+    tv_ip, content_file, theme = get_config()
+    print(f"Watching {content_file} (10s debounce)...", flush=True)
+
+    watch_content(
+        content_file,
+        lambda: update_content(tv_ip, content_file, theme),
+        state_file=get_watch_state_file_path(),
+    )
+
+
+def main():
+    update_content(*get_config())
 
 
 if __name__ == "__main__":

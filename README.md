@@ -40,6 +40,22 @@ export FRAME_THEME=clean  # optional, see below
 uv run frame-update
 ```
 
+To keep watching the configured file, run:
+
+```bash
+uv run frame-watch
+```
+
+`frame-watch` checks the file once per second and publishes it after changes
+have stopped for 10 seconds. It records the last successful content digest in
+`~/.frame-automation/last_content_sha256`, avoids duplicate uploads after a
+restart, and retries failed updates after five minutes.
+
+This repository includes
+`launchd/net.ben-phillips.frame-goals-watch.plist`, a per-user macOS
+LaunchAgent configured for `/Users/ben/Documents/Main/Display goals.md` through
+the repository's `.envrc`.
+
 ### Sending an existing image
 
 ```bash

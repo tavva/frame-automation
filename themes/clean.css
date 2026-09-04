@@ -23,7 +23,7 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     /* Clear the header and the closing rule, both taken out of the flow */
     padding: 103px 0 47px;
     counter-reset: goal;

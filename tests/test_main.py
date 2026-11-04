@@ -612,13 +612,15 @@ class TestFocusModeConfig:
         self.expect_fixture_warning(capsys)
 
 
-class TestDoneTodaySection:
-    """Tests for how the clean theme shows the board's `####` Done today section."""
+class TestBoardSections:
+    """Tests for how the clean theme shows the board's `####` subgroups and
+    `#####` Done today section."""
 
     BOARD = (
         "# Goals\n## November 4 2026\n\n"
         "### First goal\n- A step\n\n"
-        "#### Done today\n- Finished thing\n\n"
+        "#### A subgroup\n- A sub-step\n\n"
+        "##### Done today\n- Finished thing\n\n"
         "### Second goal\n- Another step\n"
     )
 
@@ -642,43 +644,79 @@ class TestDoneTodaySection:
             styles = page.evaluate(
                 """() => {
     const style = (selector) => getComputedStyle(document.querySelector(selector));
+    const left = (selector) => document.querySelector(selector).getBoundingClientRect().left;
+    const textLeft = (selector) => {
+        const element = document.querySelector(selector);
+        return element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingLeft);
+    };
     return {
-        h4Counter: style('h4').counterIncrement,
         h3Counter: style('h3').counterIncrement,
+        h3Size: parseFloat(style('h3').fontSize),
+        h4Counter: style('h4').counterIncrement,
+        h4Before: getComputedStyle(document.querySelector('h4'), '::before').content,
+        h4Border: style('h4').borderBottomStyle,
+        h4Size: parseFloat(style('h4').fontSize),
         h4Zoom: parseFloat(style('h4').zoom),
-        doneDecoration: style('h4 ~ ul li').textDecorationLine,
+        h4TextLeft: textLeft('h4'),
+        goalListLeft: textLeft('h3 + ul'),
+        subgroupListLeft: textLeft('h4 + ul'),
+        subgroupDecoration: style('h4 + ul li').textDecorationLine,
+        h5Counter: style('h5').counterIncrement,
+        h5Zoom: parseFloat(style('h5').zoom),
+        doneDecoration: style('h5 + ul li').textDecorationLine,
         laterGoalDecoration: style('h3:last-of-type + ul li').textDecorationLine,
-        h4Bottom: document.querySelector('h4').getBoundingClientRect().bottom,
+        h5Bottom: document.querySelector('h5').getBoundingClientRect().bottom,
     };
 }"""
             )
             browser.close()
         return scale, styles
 
-    def test_done_today_renders_without_taking_a_goal_number(self):
+    def test_subgroup_is_smaller_unnumbered_and_unruled(self):
         pytest.importorskip("playwright")
 
         _, styles = self._measure(self.BOARD)
 
         assert styles["h4Counter"] == "none"
+        assert styles["h4Before"] == "none"
+        assert styles["h4Border"] == "none"
+        assert styles["h4Size"] < styles["h3Size"]
+        assert styles["subgroupDecoration"] == "none"
+
+    def test_subgroup_list_is_set_in_under_its_heading(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["subgroupListLeft"] > styles["h4TextLeft"]
+        assert styles["subgroupListLeft"] > styles["goalListLeft"]
+
+    def test_done_today_renders_without_taking_a_goal_number(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["h5Counter"] == "none"
         assert styles["h3Counter"] == "goal 1"
         assert styles["doneDecoration"] == "line-through"
         assert styles["laterGoalDecoration"] == "none"
 
-    def test_done_today_shrinks_with_an_overflowing_board(self):
+    def test_subgroups_and_done_today_shrink_with_an_overflowing_board(self):
         pytest.importorskip("playwright")
 
         goals = "\n\n".join(
             f"### Goal number {n} with a reasonably long title\n"
-            "- First item\n- Second item\n- Third item"
+            "- First item\n\n"
+            f"#### Subgroup {n}\n- Second item\n- Third item"
             for n in range(1, 8)
         )
         done = "\n".join(f"- Finished thing {n}" for n in range(1, 6))
 
         scale, styles = self._measure(
-            f"# Goals\n## Today\n\n{goals}\n\n#### Done today\n{done}\n"
+            f"# Goals\n## Today\n\n{goals}\n\n##### Done today\n{done}\n"
         )
 
         assert 0.25 <= scale < 1.0
         assert styles["h4Zoom"] == pytest.approx(scale)
-        assert styles["h4Bottom"] <= 1080
+        assert styles["h5Zoom"] == pytest.approx(scale)
+        assert styles["h5Bottom"] <= 1080

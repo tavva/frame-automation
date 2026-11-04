@@ -1,5 +1,5 @@
 # ABOUTME: Builds the TV board markdown from Flow's focus file (JSONL, one item per line).
-# ABOUTME: Groups unfinished items by source or top-level project and lists today's completions.
+# ABOUTME: Groups unfinished items by source or top-level project, with subgroups, and lists today's completions.
 
 import json
 import math
@@ -179,16 +179,28 @@ def read_frontmatter(path: Path) -> dict:
     return frontmatter if isinstance(frontmatter, dict) else {}
 
 
-def group_name(item: dict, vault: Vault) -> str:
-    """Name the board group an unfinished item belongs to."""
+def board_place(item: dict, vault: Vault) -> tuple[str, str | None]:
+    """Name the group and subgroup an unfinished item goes under.
+
+    External items group by source and subgroup by their project, when they
+    have one. Vault items group by top-level project and subgroup by their own
+    project when it isn't the top-level one. General items have no subgroup.
+    The subgroup is None for items that sit directly under the group.
+    """
     if "external" in item:
-        return item["external"]["sourceLabel"]
+        project_name = item["external"].get("projectName")
+        if isinstance(project_name, str) and project_name.strip():
+            return item["external"]["sourceLabel"], project_name.strip()
+        return item["external"]["sourceLabel"], None
     if item.get("isGeneral"):
-        return GENERAL_GROUP
+        return GENERAL_GROUP, None
     project = vault.root / item["file"]
     if not project.is_file():
-        return GENERAL_GROUP
-    return vault.top_level_project(project).stem
+        return GENERAL_GROUP, None
+    top_level = vault.top_level_project(project)
+    if top_level.resolve() == project.resolve():
+        return top_level.stem, None
+    return top_level.stem, project.stem
 
 
 def completed_on(item: dict, day: date) -> bool:
@@ -204,7 +216,9 @@ def build_board_markdown(
 ) -> str:
     """Build the board: grouped unfinished items, then today's completions.
 
-    Items whose text is empty once vault markup is stripped are left off.
+    Groups are `###` headings and subgroups `####`; within a group, items with
+    no subgroup come first. Items whose text is empty once vault markup is
+    stripped are left off.
     """
     vault.allow_rescan()
 
@@ -212,11 +226,14 @@ def build_board_markdown(
     ordered = [item for item in unfinished if item.get("isPinned")] + [
         item for item in unfinished if not item.get("isPinned")
     ]
-    groups: dict[str, list[str]] = {}
+    # Each group starts with its None subgroup, for items directly under it
+    groups: dict[str, dict[str | None, list[str]]] = {}
     for item in ordered:
         text = clean_item_text(item["text"])
         if text:
-            groups.setdefault(group_name(item, vault), []).append(text)
+            group, subgroup = board_place(item, vault)
+            subgroups = groups.setdefault(group, {None: []})
+            subgroups.setdefault(subgroup, []).append(text)
     done = [
         text
         for item in items
@@ -226,11 +243,17 @@ def build_board_markdown(
     sections = [f"# {title}\n## {today:%B} {today.day} {today.year}\n"]
     if message:
         sections.append(f"**{message}**\n")
-    for heading, texts in groups.items():
-        sections.append(f"### {heading}\n" + "".join(f"- {text}\n" for text in texts))
+    for heading, subgroups in groups.items():
+        sections.append(f"### {heading}\n" + bullet_list(subgroups.pop(None)))
+        for subheading, texts in subgroups.items():
+            sections.append(f"#### {subheading}\n" + bullet_list(texts))
     if done:
-        sections.append(f"#### {DONE_HEADING}\n" + "".join(f"- {text}\n" for text in done))
+        sections.append(f"##### {DONE_HEADING}\n" + bullet_list(done))
     return "\n".join(sections)
+
+
+def bullet_list(texts: list[str]) -> str:
+    return "".join(f"- {text}\n" for text in texts)
 
 
 def print_warning(message: str) -> None:

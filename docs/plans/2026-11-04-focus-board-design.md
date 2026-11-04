@@ -179,3 +179,23 @@ project notes copied from the shapes Flow writes), not mocks:
 
 README and CLAUDE.md gain the focus mode, its variables, and the `h4`
 section in the clean theme.
+
+## Addendum: subgroups
+
+Added after the first build, at Ben's request. Groups gain a second heading
+level, `####`:
+
+- An external item subgroups by `external.projectName` (optional; Flow leaves
+  it out when the record has no project). Items without one sit directly
+  under the group.
+- A vault item subgroups by its own project when that isn't the top-level
+  project. Deeper chains collapse to top-level project, then own project.
+  Actions in the top-level project itself sit directly under the group.
+- `Misc` has no subgroups.
+- Within a group, items with no subgroup come first, then subgroups in the
+  order of their first item after pinned-first sorting.
+
+Subgroups take `####`, so Done today moves to `##### Done today` and the clean
+theme's struck-through styling moves from `h4 + ul` to `h5 + ul`. In the clean
+theme an `h4` is smaller than a goal title, unnumbered, has no rule, and its
+list is set in beneath it. Both `h4` and `h5` are in the `zoom` rule.

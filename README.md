@@ -106,7 +106,17 @@ first, grouped under a `###` heading each:
   project's `parent-project` link up to a project with no parent. The heading
   is that project's file name, as Flow shows it.
 
-Items completed today follow under a `#### Done today` heading. Source links
+Within a group, items can sit under a `####` subgroup:
+
+- items from other plugins under their project (`external.projectName`, such
+  as a Linear project), when they have one
+- project actions under their own project when it isn't the top-level one,
+  so a sub-project gets a subgroup however deep it sits
+
+Items with no subgroup, such as actions in the top-level project itself, come
+first, straight under the group. `Misc` has no subgroups.
+
+Items completed today follow under a `##### Done today` heading. Source links
 (`([[…|source]])`), `#tags`, embeds (`![[…]]`) and wikilinks are stripped from
 item text, so the board shows plain wording; markdown links and emphasis are
 kept. Items with no text left are left off.
@@ -177,9 +187,10 @@ right, opposite the title:
 A single `# Goals - August 31 2026` also works; the whole line then runs along
 the left of the rule.
 
-An `h4` starts a smaller, unnumbered section; the list straight after it is
-struck through. The Flow board uses it for `#### Done today`; the next `###` keeps
-its number.
+An `h4` is a smaller, unnumbered subheading within a goal, with its list set
+in beneath it; the Flow board uses it for subgroups. An `h5` starts a quiet,
+unnumbered section whose list straight after it is struck through; the Flow
+board uses it for `##### Done today`. Neither takes a goal number.
 
 Goals shrink to fit the frame as you add more of them, down to a quarter of
 their designed size. The header and the rules stay put.

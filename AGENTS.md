@@ -68,7 +68,7 @@ In `focus_board.py`:
 
 - **`read_focus_items(path)`** - Parses the JSONL focus file, returning items and a note for each line skipped
 - **`Vault`** - Resolves wikilinks case-insensitively (path, then unique file name), skipping dot-folders; keeps its file index between builds and rescans at most once per build on a miss
-- **`build_board_markdown(items, vault, today, title, message)`** - Groups unfinished items (external by `sourceLabel`, general under `Misc`, project items under their top-level project via `parent-project`), then lists `#### Done today`
+- **`build_board_markdown(items, vault, today, title, message)`** - Groups unfinished items (external by `sourceLabel`, general under `Misc`, project items under their top-level project via `parent-project`), with `####` subgroups (external by `projectName`, project items by their own project when it isn't the top-level one), then lists `##### Done today`
 - **`FocusBoard`** - Reads the file and builds the board for today, warning once about each skipped line
 
 Flow's focus file format is documented in Flow's README ("Focus File Format").
@@ -82,8 +82,8 @@ Themes live in `themes/` directory:
 
 Each theme is self-contained CSS with full styling control. Relative `url()` references are resolved to the theme's directory.
 
-The clean theme styles `h4` as the unnumbered, struck-through Done today
-section. Every element it scales with `--fit-scale` must be listed in its
+The clean theme styles `h4` as an unnumbered subgroup heading and `h5` as
+the unnumbered, struck-through Done today section. Every element it scales with `--fit-scale` must be listed in its
 `zoom` rule.
 
 ## Dependencies

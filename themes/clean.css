@@ -71,7 +71,7 @@ h2 {
     margin-right: -0.22em;
 }
 
-h3, h4, ul, ol, p, pre, blockquote {
+h3, h4, h5, ul, ol, p, pre, blockquote {
     zoom: var(--fit-scale, 1);
     width: calc(100% / var(--fit-scale, 1));
 }
@@ -108,9 +108,27 @@ p + h3 {
     margin-top: 48px;
 }
 
+/* A subgroup within a goal: smaller and unnumbered, set in from the goal
+   title, with its list set in further beneath it */
+h4 {
+    margin-top: 34px;
+    padding-left: 162px;
+    font-size: 46px;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    color: #2c352d;
+    text-wrap: pretty;
+}
+
+h4 + ul {
+    margin-top: 16px;
+    padding-left: 206px;
+}
+
 /* The board's Done today section: a quieter mono heading, unnumbered, with
    the list straight after it struck through lightly so it stays legible */
-h4 {
+h5 {
     margin-top: 72px;
     padding-left: 118px;
     font-family: 'Space Mono', monospace;
@@ -120,7 +138,7 @@ h4 {
     color: #7d8c7e;
 }
 
-h4 + ul li {
+h5 + ul li {
     font-size: 30px;
     color: #5f6e61;
     text-decoration: line-through;

@@ -51,18 +51,21 @@ def general_item(text, **fields):
     return vault_item("Next actions.md", text, isGeneral=True, **fields)
 
 
-def external_item(label, text, **fields):
+def external_item(label, text, project=None, **fields):
+    external = {
+        "sourceName": "linear",
+        "sourceLabel": label,
+        "url": "https://linear.app/acme/issue/ABC-1/x",
+        "externalId": "ABC-1",
+    }
+    if project is not None:
+        external["projectName"] = project
     return {
         "id": f"id-{text}",
         "text": text,
         "sphere": "work",
         "addedAt": 1793520000000,
-        "external": {
-            "sourceName": "linear",
-            "sourceLabel": label,
-            "url": "https://linear.app/acme/issue/ABC-1/x",
-            "externalId": "ABC-1",
-        },
+        "external": external,
         **fields,
     }
 
@@ -93,7 +96,7 @@ class TestReadFocusItems:
     def test_skips_lines_that_fail_to_parse_and_blank_lines(self):
         items, problems = read_focus_items(FOCUS_FILE)
 
-        assert len(items) == 9
+        assert len(items) == 11
         assert problems == ["line 5: not valid JSON"]
 
     @pytest.mark.parametrize(
@@ -175,18 +178,26 @@ class TestWholeBoard:
             "### Acme\n"
             "- Write up and share onboarding guide\n"
             "\n"
+            "#### Data platform\n"
+            "- Label the first 50 traces\n"
+            "\n"
             "### Misc\n"
             "- Book the [MOT](https://example.com/mot) for the *car*\n"
             "- Call the plumber\n"
             "\n"
             "### Flow\n"
+            "- Release Flow 2.0\n"
+            "\n"
+            "#### Keyboard shortcuts for Flow\n"
             "- Pick default shortcuts for the common commands\n"
+            "\n"
+            "#### Shortcut cheatsheet\n"
             "- Write a cheatsheet for shortcut keys\n"
             "\n"
             "### Orphan\n"
             "- Find this a home\n"
             "\n"
-            "#### Done today\n"
+            "##### Done today\n"
             "- Draft section 2 of the onboarding guide\n"
             "- Ship the syncing beta\n"
         )
@@ -198,7 +209,7 @@ class TestWholeBoard:
 
         assert headings(markdown) == []
         assert markdown.endswith(
-            "#### Done today\n"
+            "##### Done today\n"
             "- Buy bubble bath\n"
             "- Look at kerning on the website relaunch logo\n"
             "- Add Chris to the shared drive\n"
@@ -277,6 +288,101 @@ class TestGroups:
         )
 
         assert headings(markdown) == ["Flow"]
+
+
+def subheadings(markdown):
+    return [line[5:] for line in markdown.splitlines() if line.startswith("#### ")]
+
+
+class TestSubgroups:
+    def test_linear_items_subgroup_by_project_with_unassigned_items_first(self):
+        markdown = board(
+            [
+                external_item("Acme", "Label traces", project="Data platform"),
+                external_item("Acme", "Reply to Sam"),
+                external_item("Acme", "Fix login", project="Web app"),
+                external_item("Acme", "Score traces", project="Data platform"),
+            ]
+        )
+
+        assert markdown.endswith(
+            "### Acme\n"
+            "- Reply to Sam\n"
+            "\n"
+            "#### Data platform\n"
+            "- Label traces\n"
+            "- Score traces\n"
+            "\n"
+            "#### Web app\n"
+            "- Fix login\n"
+        )
+
+    @pytest.mark.parametrize("project", ["", "   ", 7, ["Onboarding"]])
+    def test_blank_or_odd_project_names_sit_directly_under_the_group(self, project):
+        markdown = board([external_item("Acme", "Reply", project=project)])
+
+        assert markdown.endswith("### Acme\n- Reply\n")
+
+    def test_project_name_is_trimmed(self):
+        markdown = board(
+            [
+                external_item("Acme", "One", project="Onboarding "),
+                external_item("Acme", "Two", project="Onboarding"),
+            ]
+        )
+
+        assert subheadings(markdown) == ["Onboarding"]
+
+    def test_each_workspace_keeps_its_own_projects(self):
+        markdown = board(
+            [
+                external_item("Acme", "Plan", project="Roadmap"),
+                external_item("Globex", "Invoice", project="Roadmap"),
+            ]
+        )
+
+        assert markdown.endswith(
+            "### Acme\n\n#### Roadmap\n- Plan\n\n"
+            "### Globex\n\n#### Roadmap\n- Invoice\n"
+        )
+
+    def test_sub_project_is_a_subgroup_and_top_level_actions_come_first(self):
+        markdown = board(
+            [
+                vault_item("Projects/Keyboard shortcuts for Flow.md", "Tools"),
+                vault_item("Projects/Flow.md", "Release"),
+            ]
+        )
+
+        assert markdown.endswith(
+            "### Flow\n- Release\n\n#### Keyboard shortcuts for Flow\n- Tools\n"
+        )
+
+    def test_deeper_chain_collapses_to_top_level_and_own_project(self):
+        # Shortcut cheatsheet -> Keyboard shortcuts for Flow -> Flow
+        markdown = board([vault_item("Projects/Shortcut cheatsheet.md", "Cheatsheet")])
+
+        assert markdown.endswith("### Flow\n\n#### Shortcut cheatsheet\n- Cheatsheet\n")
+
+    def test_project_whose_parent_does_not_resolve_has_no_subgroup(self):
+        markdown = board([vault_item("Projects/Orphan.md", "Home")])
+
+        assert markdown.endswith("### Orphan\n- Home\n")
+
+    def test_general_items_have_no_subgroups(self):
+        markdown = board([general_item("Plumber"), general_item("MOT")])
+
+        assert markdown.endswith("### Misc\n- Plumber\n- MOT\n")
+
+    def test_subgroups_follow_their_first_item_after_pinned_items(self):
+        markdown = board(
+            [
+                external_item("Acme", "Label traces", project="Data platform"),
+                external_item("Acme", "Fix login", project="Web app", isPinned=True),
+            ]
+        )
+
+        assert subheadings(markdown) == ["Web app", "Data platform"]
 
 
 class TestVaultIndex:
@@ -377,7 +483,7 @@ class TestDoneToday:
         )
 
         assert headings(markdown) == []
-        assert markdown.endswith("#### Done today\n- Onboarding\n- Bath\n")
+        assert markdown.endswith("##### Done today\n- Onboarding\n- Bath\n")
 
     def test_older_completions_are_left_off(self):
         markdown = board([general_item("Bath", completedAt=millis("2026-11-03 12:00"))])
@@ -395,7 +501,7 @@ class TestDoneToday:
             ]
         )
 
-        assert markdown.endswith("#### Done today\n- Early\n")
+        assert markdown.endswith("##### Done today\n- Early\n")
 
     def test_same_items_on_two_dates_build_different_boards(self):
         items, _ = read_focus_items(FOCUS_FILE)

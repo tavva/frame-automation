@@ -192,10 +192,17 @@ level, `####`:
   project. Deeper chains collapse to top-level project, then own project.
   Actions in the top-level project itself sit directly under the group.
 - `Misc` has no subgroups.
+- A subgroup named like its group (ignoring case) is dropped, and its items
+  sit directly under the group.
+- Projects whose `parent-project` links form a loop share one group: the
+  loop's project whose vault-relative path sorts first. This replaces
+  stopping a loop at the last project found, which split a loop into two
+  groups, each a subgroup of the other.
 - Within a group, items with no subgroup come first, then subgroups in the
   order of their first item after pinned-first sorting.
 
 Subgroups take `####`, so Done today moves to `##### Done today` and the clean
 theme's struck-through styling moves from `h4 + ul` to `h5 + ul`. In the clean
 theme an `h4` is smaller than a goal title, unnumbered, has no rule, and its
-list is set in beneath it. Both `h4` and `h5` are in the `zoom` rule.
+list is set in beneath it, numbered or not. `h4`, `h5` and `h6` are in the
+`zoom` rule.

@@ -71,7 +71,7 @@ h2 {
     margin-right: -0.22em;
 }
 
-h3, h4, h5, ul, ol, p, pre, blockquote {
+h3, h4, h5, h6, ul, ol, p, pre, blockquote {
     zoom: var(--fit-scale, 1);
     width: calc(100% / var(--fit-scale, 1));
 }
@@ -121,7 +121,8 @@ h4 {
     text-wrap: pretty;
 }
 
-h4 + ul {
+h4 + ul,
+h4 + ol {
     margin-top: 16px;
     padding-left: 206px;
 }
@@ -138,7 +139,8 @@ h5 {
     color: #7d8c7e;
 }
 
-h5 + ul li {
+h5 + ul li,
+h5 + ol li {
     font-size: 30px;
     color: #5f6e61;
     text-decoration: line-through;

@@ -151,14 +151,25 @@ class Vault:
         return self.resolve_link(match.group(1).strip())
 
     def top_level_project(self, project: Path) -> Path:
-        """Follow `parent-project` links until a project has no parent or a link fails."""
-        seen = {project.resolve()}
+        """Follow `parent-project` links until a project has no parent or a link fails.
+
+        Projects whose links form a loop all share one top: the loop's project
+        whose vault-relative path sorts first, wherever the walk joined it.
+        """
+        chain = [project.resolve()]
         while (parent := self.parent_project(project)) is not None:
-            if parent.resolve() in seen:
-                break
-            seen.add(parent.resolve())
+            if parent.resolve() in chain:
+                loop = chain[chain.index(parent.resolve()):]
+                return min(loop, key=self._sort_key)
+            chain.append(parent.resolve())
             project = parent
         return project
+
+    def _sort_key(self, path: Path) -> str:
+        try:
+            return path.relative_to(self.root.resolve()).as_posix().lower()
+        except ValueError:
+            return path.as_posix().lower()
 
 
 def read_frontmatter(path: Path) -> dict:
@@ -185,8 +196,16 @@ def board_place(item: dict, vault: Vault) -> tuple[str, str | None]:
     External items group by source and subgroup by their project, when they
     have one. Vault items group by top-level project and subgroup by their own
     project when it isn't the top-level one. General items have no subgroup.
-    The subgroup is None for items that sit directly under the group.
+    The subgroup is None for items that sit directly under the group,
+    including those whose subgroup would repeat the group's name.
     """
+    group, subgroup = name_board_place(item, vault)
+    if subgroup is not None and subgroup.casefold() == group.casefold():
+        return group, None
+    return group, subgroup
+
+
+def name_board_place(item: dict, vault: Vault) -> tuple[str, str | None]:
     if "external" in item:
         project_name = item["external"].get("projectName")
         if isinstance(project_name, str) and project_name.strip():

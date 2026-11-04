@@ -268,8 +268,31 @@ class TestGroups:
 
         assert group_of(item) == "Flow"
 
-    def test_loop_stops_at_the_last_project_before_repeating(self):
-        assert group_of(vault_item("Projects/Loop A.md", "Untangle")) == "Loop B"
+    def test_projects_in_a_loop_share_one_group(self):
+        # Loop A and Loop B are each other's parent; the first path sorts top
+        markdown = board(
+            [
+                vault_item("Projects/Loop B.md", "Untangle B"),
+                vault_item("Projects/Loop A.md", "Untangle A"),
+            ]
+        )
+
+        assert markdown.endswith(
+            "### Loop A\n- Untangle A\n\n#### Loop B\n- Untangle B\n"
+        )
+
+    def test_a_chain_into_a_loop_joins_the_loop_group(self, tmp_path):
+        projects = tmp_path / "Projects"
+        projects.mkdir()
+        (projects / "Into loop.md").write_text('---\nparent-project: "[[Loop B]]"\n---\n')
+        (projects / "Loop A.md").write_text('---\nparent-project: "[[Loop B]]"\n---\n')
+        (projects / "Loop B.md").write_text('---\nparent-project: "[[Loop A]]"\n---\n')
+        markdown = build_board_markdown(
+            [vault_item("Projects/Into loop.md", "Join")],
+            Vault(tmp_path), date(2026, 11, 4), "Goals", None,
+        )
+
+        assert markdown.endswith("### Loop A\n\n#### Into loop\n- Join\n")
 
     def test_unparseable_frontmatter_stops_the_walk(self):
         item = vault_item("Projects/Broken frontmatter.md", "Fix")
@@ -368,6 +391,33 @@ class TestSubgroups:
         markdown = board([vault_item("Projects/Orphan.md", "Home")])
 
         assert markdown.endswith("### Orphan\n- Home\n")
+
+    @pytest.mark.parametrize("project", ["Acme", "acme"])
+    def test_project_named_like_its_workspace_sits_directly_under_it(self, project):
+        markdown = board(
+            [
+                external_item("Acme", "Reply to Sam"),
+                external_item("Acme", "Plan", project=project),
+            ]
+        )
+
+        assert markdown.endswith("### Acme\n- Reply to Sam\n- Plan\n")
+
+    def test_sub_project_named_like_its_top_level_project_sits_directly_under_it(
+        self, tmp_path
+    ):
+        (tmp_path / "Projects").mkdir()
+        (tmp_path / "Areas").mkdir()
+        (tmp_path / "Projects" / "Garden.md").write_text("---\nstatus: live\n---\n")
+        (tmp_path / "Areas" / "Garden.md").write_text(
+            '---\nparent-project: "[[Projects/Garden]]"\n---\n'
+        )
+        markdown = build_board_markdown(
+            [vault_item("Areas/Garden.md", "Weed"), vault_item("Projects/Garden.md", "Mow")],
+            Vault(tmp_path), date(2026, 11, 4), "Goals", None,
+        )
+
+        assert markdown.endswith("### Garden\n- Weed\n- Mow\n")
 
     def test_general_items_have_no_subgroups(self):
         markdown = board([general_item("Plumber"), general_item("MOT")])

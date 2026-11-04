@@ -620,7 +620,9 @@ class TestBoardSections:
         "# Goals\n## November 4 2026\n\n"
         "### First goal\n- A step\n\n"
         "#### A subgroup\n- A sub-step\n\n"
+        "#### A numbered subgroup\n1. A numbered sub-step\n\n"
         "##### Done today\n- Finished thing\n\n"
+        "##### Done in order\n1. Finished first\n\n"
         "### Second goal\n- Another step\n"
     )
 
@@ -643,11 +645,16 @@ class TestBoardSections:
             scale = fit_to_frame(page)
             styles = page.evaluate(
                 """() => {
-    const style = (selector) => getComputedStyle(document.querySelector(selector));
-    const left = (selector) => document.querySelector(selector).getBoundingClientRect().left;
+    // Selectors missing from a board measure as null
+    const style = (selector) => {
+        const element = document.querySelector(selector);
+        return element ? getComputedStyle(element) : {};
+    };
     const textLeft = (selector) => {
         const element = document.querySelector(selector);
-        return element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingLeft);
+        return element
+            ? element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingLeft)
+            : null;
     };
     return {
         h3Counter: style('h3').counterIncrement,
@@ -660,10 +667,19 @@ class TestBoardSections:
         h4TextLeft: textLeft('h4'),
         goalListLeft: textLeft('h3 + ul'),
         subgroupListLeft: textLeft('h4 + ul'),
+        numberedSubgroupListLeft: textLeft('h4 + ol'),
         subgroupDecoration: style('h4 + ul li').textDecorationLine,
         h5Counter: style('h5').counterIncrement,
         h5Zoom: parseFloat(style('h5').zoom),
         doneDecoration: style('h5 + ul li').textDecorationLine,
+        numberedDoneDecoration: style('h5 + ol li').textDecorationLine,
+        h6Zoom: parseFloat(style('h6').zoom),
+        lastItemBottom: [...document.querySelectorAll('li')].pop().getBoundingClientRect().bottom,
+        contentBottom: (() => {
+            const container = document.querySelector('.container');
+            return container.getBoundingClientRect().bottom
+                - parseFloat(getComputedStyle(container).paddingBottom);
+        })(),
         laterGoalDecoration: style('h3:last-of-type + ul li').textDecorationLine,
         h5Bottom: document.querySelector('h5').getBoundingClientRect().bottom,
     };
@@ -690,6 +706,7 @@ class TestBoardSections:
 
         assert styles["subgroupListLeft"] > styles["h4TextLeft"]
         assert styles["subgroupListLeft"] > styles["goalListLeft"]
+        assert styles["numberedSubgroupListLeft"] == styles["subgroupListLeft"]
 
     def test_done_today_renders_without_taking_a_goal_number(self):
         pytest.importorskip("playwright")
@@ -699,24 +716,30 @@ class TestBoardSections:
         assert styles["h5Counter"] == "none"
         assert styles["h3Counter"] == "goal 1"
         assert styles["doneDecoration"] == "line-through"
+        assert styles["numberedDoneDecoration"] == "line-through"
         assert styles["laterGoalDecoration"] == "none"
 
     def test_subgroups_and_done_today_shrink_with_an_overflowing_board(self):
         pytest.importorskip("playwright")
+        from frame_automation.main import FIT_MIN_SCALE
 
         goals = "\n\n".join(
             f"### Goal number {n} with a reasonably long title\n"
             "- First item\n\n"
             f"#### Subgroup {n}\n- Second item\n- Third item"
-            for n in range(1, 8)
+            for n in range(1, 6)
         )
         done = "\n".join(f"- Finished thing {n}" for n in range(1, 6))
 
         scale, styles = self._measure(
-            f"# Goals\n## Today\n\n{goals}\n\n##### Done today\n{done}\n"
+            f"# Goals\n## Today\n\n{goals}\n\n###### A note\n\n"
+            f"##### Done today\n{done}\n"
         )
 
-        assert 0.25 <= scale < 1.0
+        # Above the minimum scale, so the board is shrunk to fit rather than cut off
+        assert FIT_MIN_SCALE < scale < 1.0
         assert styles["h4Zoom"] == pytest.approx(scale)
         assert styles["h5Zoom"] == pytest.approx(scale)
-        assert styles["h5Bottom"] <= 1080
+        assert styles["h6Zoom"] == pytest.approx(scale)
+        # The last item ends inside the container, above its padding and the closing rule
+        assert styles["lastItemBottom"] <= styles["contentBottom"]

@@ -128,17 +128,20 @@ h4 {
     color: #7d8c7e;
 }
 
-h4 ~ ul li {
+h4 + ul li {
     font-size: 30px;
     color: #5f6e61;
     text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgba(95, 110, 97, 0.55);
 }
 ```
 
 `h4` joins the `zoom: var(--fit-scale)` rule alongside `h3, ul, ol, p`, so the
 fit-to-frame scaling counts it and shrinks it with everything else. `h4` uses
-no `counter-increment`, so the `###` numbering is unaffected. The lists after
-it keep the em-dash bullets. Whether the line-through reads well on the TV is
+no `counter-increment`, so the `###` numbering is unaffected. Only the list
+straight after it is struck through, so a later `###` goal in a hand-written
+board is unaffected. That list keeps the em-dash bullets. Whether the line-through reads well on the TV is
 a judgement to make on the first real render.
 
 The other themes don't style `h4` specially; they show it as their default

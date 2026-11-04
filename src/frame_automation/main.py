@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import tempfile
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +20,7 @@ import time
 from samsungtvws import SamsungTVWS
 from wakeonlan import send_magic_packet
 
-from frame_automation.focus_board import FocusBoard
+from frame_automation.focus_board import FocusBoard, Vault
 
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
@@ -36,9 +37,14 @@ WAKE_MAX_RETRIES = 12  # Max attempts (12 * 5s = 60s timeout)
 class ContentWatcher:
     """Publish content after it has remained unchanged for a while.
 
-    `read_content` returns the markdown to show; a missing file (FileNotFoundError)
-    skips the poll. `publish` receives the content that was hashed, so what is
-    published is exactly what the saved digest describes.
+    `read_content` returns the markdown to show. A missing file, or one cut off
+    part way through a character while it is being written, skips the poll.
+    `publish` receives the content that was hashed, so what is published is
+    exactly what the saved digest describes.
+
+    A run of failed publishes is logged in full once, then again only when the
+    error changes, and once more when publishing recovers, so a TV that is off
+    overnight doesn't fill the log.
     """
 
     def __init__(
@@ -64,11 +70,13 @@ class ContentWatcher:
         self.pending_digest = None
         self.pending_content = None
         self.deadline = None
+        self.failed_attempts = 0
+        self.last_error = None
 
     def poll(self) -> None:
         try:
             content = self.read_content()
-        except FileNotFoundError:
+        except (FileNotFoundError, UnicodeDecodeError):
             return
 
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -90,13 +98,18 @@ class ContentWatcher:
         try:
             self.publish(self.pending_content)
         except Exception as error:
+            self.report_failure(error)
+            self.deadline = now + self.retry_seconds
+            return
+
+        if self.failed_attempts:
             print(
-                f"Update failed; retrying in {self.retry_seconds:g}s: {error}",
+                f"Update succeeded after {self.failed_attempts} failed attempts",
                 file=sys.stderr,
                 flush=True,
             )
-            self.deadline = now + self.retry_seconds
-            return
+            self.failed_attempts = 0
+            self.last_error = None
 
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         self.state_file.write_text(self.pending_digest)
@@ -104,6 +117,24 @@ class ContentWatcher:
         self.pending_digest = None
         self.pending_content = None
         self.deadline = None
+
+    def report_failure(self, error: Exception) -> None:
+        self.failed_attempts += 1
+        if self.failed_attempts == 1:
+            print(
+                f"Update failed; retrying every {self.retry_seconds:g}s until it "
+                f"succeeds: {error}\n{traceback.format_exc()}",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif str(error) != self.last_error:
+            print(
+                f"Update still failing (attempt {self.failed_attempts}): {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+        self.last_error = str(error)
 
 
 def watch_content(
@@ -194,7 +225,10 @@ def get_config() -> Config:
     if not tv_ip:
         sys.exit("Error: FRAME_TV_IP environment variable not set")
     if content_file and focus_file:
-        sys.exit("Error: Set FRAME_CONTENT_FILE or FRAME_FOCUS_FILE, not both")
+        sys.exit(
+            "Error: Set FRAME_CONTENT_FILE or FRAME_FOCUS_FILE, not both "
+            "(check .envrc and .env)"
+        )
     if not content_file and not focus_file:
         sys.exit("Error: Set FRAME_CONTENT_FILE or FRAME_FOCUS_FILE")
 
@@ -229,7 +263,7 @@ def get_focus_source(focus_path: Path) -> tuple[Path, Callable[[], str]]:
     if not focus_path.exists():
         sys.exit(f"Error: Focus file not found: {focus_path}")
 
-    return focus_path, FocusBoard(focus_path, vault_path, title, message).build
+    return focus_path, FocusBoard(focus_path, Vault(vault_path), title, message).build
 
 
 def find_theme_path(theme_name: str) -> tuple[Path, Path]:

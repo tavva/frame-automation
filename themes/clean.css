@@ -103,8 +103,13 @@ h3 ~ h3 {
     margin-top: 72px;
 }
 
+/* Room between a message paragraph and the first goal below it */
+p + h3 {
+    margin-top: 48px;
+}
+
 /* The board's Done today section: a quieter mono heading, unnumbered, with
-   its items struck through */
+   the list straight after it struck through lightly so it stays legible */
 h4 {
     margin-top: 72px;
     padding-left: 118px;
@@ -115,10 +120,12 @@ h4 {
     color: #7d8c7e;
 }
 
-h4 ~ ul li {
+h4 + ul li {
     font-size: 30px;
     color: #5f6e61;
     text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgba(95, 110, 97, 0.55);
 }
 
 ul, ol {

@@ -9,6 +9,7 @@ import pytest
 
 from frame_automation.focus_board import (
     FocusBoard,
+    Vault,
     build_board_markdown,
     clean_item_text,
     read_focus_items,
@@ -67,7 +68,7 @@ def external_item(label, text, **fields):
 
 
 def board(items, today=date(2026, 11, 4), title="Goals", message=None):
-    return build_board_markdown(items, VAULT, today, title, message)
+    return build_board_markdown(items, Vault(VAULT), today, title, message)
 
 
 def headings(markdown):
@@ -107,6 +108,12 @@ class TestReadFocusItems:
             ('{"file": "Next actions.md", "isGeneral": true}', "no text"),
             ('{"file": "Next actions.md", "text": "Bath", "completedAt": "today"}',
              "completedAt is not a number"),
+            ('{"file": "Next actions.md", "text": "Bath", "completedAt": NaN}',
+             "completedAt is not a finite number"),
+            ('{"file": "Next actions.md", "text": "Bath", "completedAt": Infinity}',
+             "completedAt is not a finite number"),
+            ('{"file": "Next actions.md", "text": "Bath", "completedAt": 1e300}',
+             "completedAt is out of range"),
         ],
     )
     def test_skips_lines_the_board_cannot_show(self, tmp_path, line, problem):
@@ -130,7 +137,7 @@ class TestFocusBoard:
         focus_file.write_text('{"text": "Onboarding", "external": null}\n')
         warnings = []
         focus_board = FocusBoard(
-            focus_file, VAULT, "Goals", None,
+            focus_file, Vault(VAULT), "Goals", None,
             today=lambda: date(2026, 11, 4), warn=warnings.append,
         )
 
@@ -147,7 +154,7 @@ class TestFocusBoard:
         focus_file = tmp_path / "focus.md"
         focus_file.write_text("{oops\n")
 
-        board_text = FocusBoard(focus_file, VAULT, "Goals", None).build()
+        board_text = FocusBoard(focus_file, Vault(VAULT), "Goals", None).build()
 
         assert board_text.startswith("# Goals\n")
         captured = capsys.readouterr()
@@ -235,9 +242,18 @@ class TestGroups:
     def test_ambiguous_file_name_is_treated_as_unresolved(self):
         assert group_of(vault_item("Projects/Dup child.md", "Pick")) == "Dup child"
 
-    def test_obsidian_folder_is_not_searched(self):
-        # .obsidian/Flow.md would make [[Flow]] ambiguous if it were searched
+    def test_dot_folders_are_not_searched(self):
+        # .obsidian/Flow.md and .trash/Flow.md would make [[Flow]] ambiguous
         item = vault_item("Projects/Keyboard shortcuts for Flow.md", "Tools")
+
+        assert group_of(item) == "Flow"
+
+    def test_links_match_case_insensitively_and_use_the_real_file_name(self):
+        # Lower link.md links to [[flow]]; the heading is the file's own name
+        assert group_of(vault_item("Projects/Lower link.md", "Lower")) == "Flow"
+
+    def test_path_link_with_the_md_extension(self):
+        item = vault_item("Projects/Extension link.md", "Extension")
 
         assert group_of(item) == "Flow"
 
@@ -261,6 +277,67 @@ class TestGroups:
         )
 
         assert headings(markdown) == ["Flow"]
+
+
+class TestVaultIndex:
+    """The vault's file index is reused between builds and rescanned on a miss."""
+
+    @pytest.fixture
+    def vault_copy(self, tmp_path):
+        import shutil
+
+        shutil.copytree(VAULT, tmp_path / "vault")
+        return tmp_path / "vault"
+
+    def build(self, vault, items):
+        return build_board_markdown(items, vault, date(2026, 11, 4), "Goals", None)
+
+    def test_hits_reuse_the_index_between_builds(self, vault_copy):
+        vault = Vault(vault_copy)
+        items = [vault_item("Projects/Keyboard shortcuts for Flow.md", "Tools")]
+
+        self.build(vault, items)
+        self.build(vault, items)
+        self.build(vault, items)
+
+        assert vault.scans == 1
+
+    def test_a_miss_rescans_and_finds_a_new_file(self, vault_copy):
+        vault = Vault(vault_copy)
+        child = vault_copy / "Projects" / "New child.md"
+        child.write_text('---\nparent-project: "[[New parent]]"\n---\n')
+        items = [vault_item("Projects/New child.md", "Child")]
+
+        assert headings(self.build(vault, items)) == ["New child"]
+
+        (vault_copy / "Areas").mkdir()
+        (vault_copy / "Areas" / "New parent.md").write_text("---\nstatus: live\n---\n")
+
+        assert headings(self.build(vault, items)) == ["New parent"]
+
+    def test_a_moved_file_is_found_at_its_new_place(self, vault_copy):
+        vault = Vault(vault_copy)
+        items = [vault_item("Projects/Keyboard shortcuts for Flow.md", "Tools")]
+        assert headings(self.build(vault, items)) == ["Flow"]
+
+        (vault_copy / "Archive" / "Flow.md").write_bytes(
+            (vault_copy / "Projects" / "Flow.md").read_bytes()
+        )
+        (vault_copy / "Projects" / "Flow.md").unlink()
+
+        assert headings(self.build(vault, items)) == ["Flow"]
+        assert vault.scans == 2
+
+    def test_a_miss_rescans_at_most_once_per_build(self, vault_copy):
+        vault = Vault(vault_copy)
+        items = [
+            vault_item("Projects/Orphan.md", "One"),
+            vault_item("Projects/Orphan.md", "Two"),
+        ]
+
+        self.build(vault, items)
+
+        assert vault.scans == 1
 
 
 class TestOrder:
@@ -346,10 +423,24 @@ class TestCleanItemText:
                 "Book the [MOT](https://example.com/mot#top) for the *car*",
             ),
             ("Fix issue #42 today", "Fix issue #42 today"),
+            ("Call Bob #urgent.", "Call Bob."),
+            ("Look at ![[diagram.png]] again", "Look at again"),
+            ("Read [[Projects/Flow sync.md]]", "Read Flow sync"),
         ],
     )
     def test_strips_vault_markup_and_keeps_markdown(self, text, cleaned):
         assert clean_item_text(text) == cleaned
+
+    def test_items_that_clean_to_nothing_are_left_off(self):
+        markdown = board(
+            [
+                general_item("#someday"),
+                general_item("Bath"),
+                general_item("![[photo.jpg]]", completedAt=millis("2026-11-04 08:00")),
+            ]
+        )
+
+        assert markdown == "# Goals\n## November 4 2026\n\n### Misc\n- Bath\n"
 
     def test_external_item_text_is_cleaned_too(self):
         item = external_item("Acme", "Review [[Onboarding guide|the plan]] #context/work")

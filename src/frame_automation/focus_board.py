@@ -2,6 +2,7 @@
 # ABOUTME: Groups unfinished items by source or top-level project and lists today's completions.
 
 import json
+import math
 import re
 import sys
 from collections.abc import Callable
@@ -12,7 +13,9 @@ GENERAL_GROUP = "Misc"
 DONE_HEADING = "Done today"
 
 SOURCE_LINK = re.compile(r"\s*\(\[\[[^\]]*\|source\]\]\)")
-TAG = re.compile(r"(?<!\S)#(?!\d+(?!\S))[^\s#]+")
+EMBED = re.compile(r"!\[\[[^\]]*\]\]")
+# A tag and the space before it; Obsidian tags are letters, digits, _, - and /
+TAG = re.compile(r"\s*(?<!\S)#([\w/-]+)")
 WIKILINK = re.compile(r"\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]")
 
 
@@ -47,10 +50,15 @@ def find_item_problem(item) -> str | None:
     if not isinstance(item.get("text"), str):
         return "no text"
     completed_at = item.get("completedAt")
-    if completed_at is not None and (
-        isinstance(completed_at, bool) or not isinstance(completed_at, (int, float))
-    ):
-        return "completedAt is not a number"
+    if completed_at is not None:
+        if isinstance(completed_at, bool) or not isinstance(completed_at, (int, float)):
+            return "completedAt is not a number"
+        if not math.isfinite(completed_at):
+            return "completedAt is not a finite number"
+        try:
+            datetime.fromtimestamp(completed_at / 1000)
+        except (OverflowError, OSError, ValueError):
+            return "completedAt is out of range"
     if "external" in item:
         external = item["external"]
         if not isinstance(external, dict):
@@ -65,38 +73,72 @@ def find_item_problem(item) -> str | None:
 def clean_item_text(text: str) -> str:
     """Strip vault markup that means nothing on the TV, keeping markdown."""
     text = SOURCE_LINK.sub("", text)
-    text = TAG.sub("", text)
+    text = EMBED.sub("", text)
+    # Obsidian doesn't treat an all-digit word like #42 as a tag
+    text = TAG.sub(
+        lambda match: match.group(0) if match.group(1).isdigit() else "", text
+    )
     text = WIKILINK.sub(
-        lambda match: match.group(2) or Path(match.group(1)).name, text
+        lambda match: match.group(2) or link_name(match.group(1)), text
     )
     return " ".join(text.split())
 
 
+def link_name(target: str) -> str:
+    """The name a link to `target` shows: its file name without `.md`."""
+    name = Path(target.strip()).name
+    return name[:-3] if name.lower().endswith(".md") else name
+
+
 class Vault:
-    """Resolves files and wikilinks in an Obsidian vault the way Obsidian does in practice."""
+    """Resolves files and wikilinks in an Obsidian vault the way Obsidian does in practice.
+
+    Links match case-insensitively, by vault-relative path and then by unique
+    file name. Dot-folders such as `.obsidian` and `.trash` are not searched.
+    The file index is kept between builds and rescanned at most once per build,
+    when a lookup misses or finds a file that has gone.
+    """
 
     def __init__(self, root: Path):
         self.root = root
-        self._files_by_name = None
+        self.scans = 0
+        self._files_by_path = {}
+        self._files_by_name = {}
+        self._may_rescan = True
+
+    def allow_rescan(self) -> None:
+        """Let the next missed lookup rescan the vault; called once per build."""
+        self._may_rescan = True
 
     def resolve_link(self, target: str) -> Path | None:
-        """Resolve a link target by vault-relative path, then by unique file name."""
-        if not target.endswith(".md"):
+        """Resolve a link target to a file, or None if it is missing or ambiguous."""
+        target = target.strip()
+        if not target.lower().endswith(".md"):
             target += ".md"
-        exact = self.root / target
-        if exact.is_file():
+        found = self._lookup(target)
+        if (found is None or not found.is_file()) and self._may_rescan:
+            self._scan()
+            found = self._lookup(target)
+        return found
+
+    def _lookup(self, target: str) -> Path | None:
+        exact = self._files_by_path.get(target.lower())
+        if exact is not None:
             return exact
-        matches = self._files_named(Path(target).name)
+        matches = self._files_by_name.get(Path(target).name.lower(), [])
         return matches[0] if len(matches) == 1 else None
 
-    def _files_named(self, name: str) -> list[Path]:
-        if self._files_by_name is None:
-            self._files_by_name = {}
-            for path in self.root.rglob("*.md"):
-                if ".obsidian" in path.relative_to(self.root).parts:
-                    continue
-                self._files_by_name.setdefault(path.name, []).append(path)
-        return self._files_by_name.get(name, [])
+    def _scan(self) -> None:
+        self.scans += 1
+        self._may_rescan = False
+        self._files_by_path = {}
+        self._files_by_name = {}
+        for path in self.root.rglob("*.md"):
+            relative = path.relative_to(self.root)
+            if any(part.startswith(".") for part in relative.parts):
+                continue
+            self._files_by_path[relative.as_posix().lower()] = path
+            self._files_by_name.setdefault(path.name.lower(), []).append(path)
 
     def parent_project(self, project: Path) -> Path | None:
         """Return the file a project's `parent-project` link points to, if it resolves."""
@@ -158,10 +200,13 @@ def completed_on(item: dict, day: date) -> bool:
 
 
 def build_board_markdown(
-    items: list[dict], vault_root: Path, today: date, title: str, message: str | None
+    items: list[dict], vault: Vault, today: date, title: str, message: str | None
 ) -> str:
-    """Build the board: grouped unfinished items, then today's completions."""
-    vault = Vault(vault_root)
+    """Build the board: grouped unfinished items, then today's completions.
+
+    Items whose text is empty once vault markup is stripped are left off.
+    """
+    vault.allow_rescan()
 
     unfinished = [item for item in items if item.get("completedAt") is None]
     ordered = [item for item in unfinished if item.get("isPinned")] + [
@@ -169,10 +214,14 @@ def build_board_markdown(
     ]
     groups: dict[str, list[str]] = {}
     for item in ordered:
-        groups.setdefault(group_name(item, vault), []).append(
-            clean_item_text(item["text"])
-        )
-    done = [clean_item_text(item["text"]) for item in items if completed_on(item, today)]
+        text = clean_item_text(item["text"])
+        if text:
+            groups.setdefault(group_name(item, vault), []).append(text)
+    done = [
+        text
+        for item in items
+        if completed_on(item, today) and (text := clean_item_text(item["text"]))
+    ]
 
     sections = [f"# {title}\n## {today:%B} {today.day} {today.year}\n"]
     if message:
@@ -198,7 +247,7 @@ class FocusBoard:
     def __init__(
         self,
         focus_path: Path,
-        vault_root: Path,
+        vault: Vault,
         title: str,
         message: str | None,
         *,
@@ -206,7 +255,7 @@ class FocusBoard:
         warn: Callable[[str], None] = print_warning,
     ):
         self.focus_path = focus_path
-        self.vault_root = vault_root
+        self.vault = vault
         self.title = title
         self.message = message
         self.today = today
@@ -220,5 +269,5 @@ class FocusBoard:
                 self.warn(f"Skipped {self.focus_path} {problem}")
         self.reported_problems = set(problems)
         return build_board_markdown(
-            items, self.vault_root, self.today(), self.title, self.message
+            items, self.vault, self.today(), self.title, self.message
         )

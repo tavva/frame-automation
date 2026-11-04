@@ -582,7 +582,7 @@ class TestFocusModeConfig:
         with pytest.raises(SystemExit) as excinfo:
             get_config()
 
-        assert "both" in str(excinfo.value)
+        assert "not both (check .envrc and .env)" in str(excinfo.value)
 
     def test_neither_mode_set_names_both_variables(self):
         from frame_automation.main import get_config
@@ -647,7 +647,7 @@ class TestDoneTodaySection:
         h3Counter: style('h3').counterIncrement,
         h4Zoom: parseFloat(style('h4').zoom),
         doneDecoration: style('h4 ~ ul li').textDecorationLine,
-        goalDecoration: style('ul li').textDecorationLine,
+        laterGoalDecoration: style('h3:last-of-type + ul li').textDecorationLine,
         h4Bottom: document.querySelector('h4').getBoundingClientRect().bottom,
     };
 }"""
@@ -663,7 +663,7 @@ class TestDoneTodaySection:
         assert styles["h4Counter"] == "none"
         assert styles["h3Counter"] == "goal 1"
         assert styles["doneDecoration"] == "line-through"
-        assert styles["goalDecoration"] == "none"
+        assert styles["laterGoalDecoration"] == "none"
 
     def test_done_today_shrinks_with_an_overflowing_board(self):
         pytest.importorskip("playwright")

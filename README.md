@@ -49,12 +49,16 @@ uv run frame-watch
 `frame-watch` checks the content once per second and publishes it after
 changes have stopped for 10 seconds. It records the last successful content digest in
 `~/.frame-automation/last_content_sha256`, avoids duplicate uploads after a
-restart, and retries failed updates after five minutes.
+restart, and retries failed updates after five minutes. A run of failures
+is logged in full once, then only when the error changes, and once more when
+an update gets through.
 
 This repository includes
 `launchd/net.ben-phillips.frame-goals-watch.plist`, a per-user macOS
-LaunchAgent configured for `/Users/ben/Documents/Main/Display goals.md` through
-the repository's `.envrc`.
+LaunchAgent that runs `frame-watch` through `direnv exec`, so it takes its
+settings from the repository's `.envrc` (which loads `.env` first). The
+`.envrc` decides what it shows: `FRAME_CONTENT_FILE` for a markdown file such
+as `/Users/ben/Documents/Main/Display goals.md`, or the focus variables below.
 
 ### Building the board from Flow's Focus list
 
@@ -73,6 +77,26 @@ uv run frame-update   # or frame-watch
 Set `FRAME_FOCUS_FILE` or `FRAME_CONTENT_FILE`, not both. frame-automation only
 reads Flow's files; it never writes to them.
 
+To switch the LaunchAgent from `Display goals.md` to the Focus board, replace
+the `FRAME_CONTENT_FILE` line in `.envrc` with:
+
+```bash
+export FRAME_FOCUS_FILE="${FRAME_FOCUS_FILE:-$HOME/Documents/Main/flow-focus-data/focus.md}"
+export FRAME_VAULT_ROOT="${FRAME_VAULT_ROOT:-$HOME/Documents/Main}"
+export FRAME_BOARD_MESSAGE="${FRAME_BOARD_MESSAGE:-No new things!}"
+```
+
+Make sure `.env` doesn't set `FRAME_CONTENT_FILE` either, or `frame-watch`
+exits with "not both". Then run `direnv allow` in the repository and restart
+the agent:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/net.ben-phillips.frame-goals-watch
+```
+
+To go back, restore the `FRAME_CONTENT_FILE` line and remove the three focus
+lines.
+
 The board shows today's date and the unfinished Focus items, pinned ones
 first, grouped under a `###` heading each:
 
@@ -83,8 +107,13 @@ first, grouped under a `###` heading each:
   is that project's file name, as Flow shows it.
 
 Items completed today follow under a `#### Done today` heading. Source links
-(`([[…|source]])`), `#tags` and wikilinks are stripped from item text, so the
-board shows plain wording; markdown links and emphasis are kept.
+(`([[…|source]])`), `#tags`, embeds (`![[…]]`) and wikilinks are stripped from
+item text, so the board shows plain wording; markdown links and emphasis are
+kept. Items with no text left are left off.
+
+Links resolve as Obsidian resolves them: by vault-relative path, then by
+unique file name, ignoring case and skipping dot-folders such as `.obsidian`
+and `.trash`.
 
 `frame-watch` rebuilds the board every second, so it updates after a Focus
 change, after a project moves under a different parent, and at midnight when
@@ -148,8 +177,8 @@ right, opposite the title:
 A single `# Goals - August 31 2026` also works; the whole line then runs along
 the left of the rule.
 
-An `h4` starts a smaller, unnumbered section whose list items are struck
-through. The Flow board uses it for `#### Done today`; the next `###` keeps
+An `h4` starts a smaller, unnumbered section; the list straight after it is
+struck through. The Flow board uses it for `#### Done today`; the next `###` keeps
 its number.
 
 Goals shrink to fit the frame as you add more of them, down to a quarter of

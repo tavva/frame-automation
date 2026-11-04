@@ -67,7 +67,8 @@ changes.
 In `focus_board.py`:
 
 - **`read_focus_items(path)`** - Parses the JSONL focus file, returning items and a note for each line skipped
-- **`build_board_markdown(items, vault_root, today, title, message)`** - Groups unfinished items (external by `sourceLabel`, general under `Misc`, project items under their top-level project via `parent-project`), then lists `#### Done today`
+- **`Vault`** - Resolves wikilinks case-insensitively (path, then unique file name), skipping dot-folders; keeps its file index between builds and rescans at most once per build on a miss
+- **`build_board_markdown(items, vault, today, title, message)`** - Groups unfinished items (external by `sourceLabel`, general under `Misc`, project items under their top-level project via `parent-project`), then lists `#### Done today`
 - **`FocusBoard`** - Reads the file and builds the board for today, warning once about each skipped line
 
 Flow's focus file format is documented in Flow's README ("Focus File Format").

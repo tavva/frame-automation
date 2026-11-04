@@ -47,7 +47,7 @@ def test_initial_content_is_published_after_ten_quiet_seconds(tmp_path):
     assert state_file.read_text() == hashlib.sha256(b"# Goals\n").hexdigest()
 
 
-def test_failed_publish_is_retried_after_five_minutes(tmp_path):
+def test_failed_publish_is_retried_after_five_minutes(tmp_path, capsys):
     from frame_automation import main as main_module
 
     content_file = tmp_path / "goals.md"
@@ -84,6 +84,56 @@ def test_failed_publish_is_retried_after_five_minutes(tmp_path):
     watcher.poll()
     assert attempts == [10, 310]
     assert state_file.exists()
+
+    err = capsys.readouterr().err
+    assert err.startswith(
+        "Update failed; retrying every 300s until it succeeds: TV unavailable\n"
+        "Traceback (most recent call last):\n"
+    )
+    assert err.endswith(
+        "ConnectionError: TV unavailable\nUpdate succeeded after 1 failed attempts\n"
+    )
+
+
+def test_a_night_of_failures_logs_only_when_the_error_changes(tmp_path, capsys):
+    from frame_automation import main as main_module
+
+    content_file = tmp_path / "goals.md"
+    content_file.write_text("# Goals\n")
+    clock = FakeClock()
+    errors = iter(
+        [TimeoutError("Operation timed out")] * 50
+        + [ConnectionRefusedError("Connection refused")] * 3
+    )
+
+    def publish(content):
+        error = next(errors, None)
+        if error:
+            raise error
+
+    watcher = main_module.ContentWatcher(
+        content_file.read_text,
+        publish,
+        state_file=tmp_path / "state",
+        clock=clock,
+        debounce_seconds=10,
+        retry_seconds=300,
+    )
+    watcher.poll()
+    for _ in range(60):
+        clock.advance(300)
+        watcher.poll()
+
+    lines = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if not line.startswith((" ", "Traceback", "TimeoutError"))
+    ]
+    assert lines == [
+        "Update failed; retrying every 300s until it succeeds: Operation timed out",
+        "Update still failing (attempt 51): Connection refused",
+        "Update succeeded after 53 failed attempts",
+    ]
 
 
 def test_watch_content_polls_once_per_second(tmp_path):
@@ -275,13 +325,13 @@ class TestFocusModeWatcher:
 
     def _watcher(self, vault, today, published, clock):
         from frame_automation import main as main_module
-        from frame_automation.focus_board import FocusBoard
+        from frame_automation.focus_board import FocusBoard, Vault
 
         self.warnings = []
         return main_module.ContentWatcher(
             FocusBoard(
                 vault / "flow-focus-data" / "focus.md",
-                vault,
+                Vault(vault),
                 "Goals",
                 None,
                 today=lambda: today[0],
@@ -350,7 +400,14 @@ class TestFocusModeWatcher:
         published = []
         watcher = self._watcher(vault, [date(2026, 11, 4)], published, clock)
         focus_file = vault / "flow-focus-data" / "focus.md"
+        focus_file.write_text(
+            focus_file.read_text()
+            + '{"file":"Next actions.md","lineNumber":8,"lineContent":"- [ ] Plan – later",'
+            '"text":"Plan – later","sphere":"personal","isGeneral":true,"addedAt":1793520000008}\n'
+        )
         full = focus_file.read_text()
+        full_bytes = focus_file.read_bytes()
+        mid_dash = full_bytes.index("–".encode()) + 1
 
         watcher.poll()
         clock.advance(10)
@@ -359,10 +416,13 @@ class TestFocusModeWatcher:
 
         focus_file.write_text("")
         watcher.poll()
-        clock.advance(4)
+        clock.advance(3)
         focus_file.write_text(full[:200])
         watcher.poll()
-        clock.advance(4)
+        clock.advance(3)
+        focus_file.write_bytes(full_bytes[:mid_dash])
+        watcher.poll()
+        clock.advance(3)
         focus_file.write_text(full)
         watcher.poll()
         clock.advance(60)
@@ -370,3 +430,33 @@ class TestFocusModeWatcher:
 
         assert len(published) == 1
         assert any(w.endswith("line 1: not valid JSON") for w in self.warnings)
+
+
+def test_markdown_file_cut_mid_character_waits_for_the_rest(tmp_path):
+    from frame_automation import main as main_module
+
+    content_file = tmp_path / "goals.md"
+    text = "# Goals\n- Platform team – AI\n"
+    cut = text.encode().index("–".encode()) + 1
+    content_file.write_bytes(text.encode()[:cut])
+    clock = FakeClock()
+    published = []
+    watcher = main_module.ContentWatcher(
+        lambda: content_file.read_bytes().decode("utf-8"),
+        published.append,
+        state_file=tmp_path / "state",
+        clock=clock,
+        debounce_seconds=10,
+    )
+
+    watcher.poll()
+    clock.advance(30)
+    watcher.poll()
+    assert published == []
+
+    content_file.write_text(text)
+    watcher.poll()
+    clock.advance(10)
+    watcher.poll()
+
+    assert published == [text]

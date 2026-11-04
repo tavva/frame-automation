@@ -71,7 +71,7 @@ h2 {
     margin-right: -0.22em;
 }
 
-h3, ul, ol, p, pre, blockquote {
+h3, h4, ul, ol, p, pre, blockquote {
     zoom: var(--fit-scale, 1);
     width: calc(100% / var(--fit-scale, 1));
 }
@@ -101,6 +101,24 @@ h3::before {
 
 h3 ~ h3 {
     margin-top: 72px;
+}
+
+/* The board's Done today section: a quieter mono heading, unnumbered, with
+   its items struck through */
+h4 {
+    margin-top: 72px;
+    padding-left: 118px;
+    font-family: 'Space Mono', monospace;
+    font-size: 26px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #7d8c7e;
+}
+
+h4 ~ ul li {
+    font-size: 30px;
+    color: #5f6e61;
+    text-decoration: line-through;
 }
 
 ul, ol {

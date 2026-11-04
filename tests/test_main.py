@@ -120,13 +120,13 @@ class TestMainOrdering:
         content_file = tmp_path / "content.md"
         content_file.write_text("# Hello")
 
-        monkeypatch.setattr(
-            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
-        )
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.setattr(
             main_module,
             "render_to_image",
-            lambda content, output, theme: calls.append("render"),
+            lambda markdown_text, output, theme: calls.append("render"),
         )
         monkeypatch.setattr(
             main_module,
@@ -166,13 +166,13 @@ class TestMainCleanup:
         content_file.write_text("# Hello")
         rendered = []
 
-        monkeypatch.setattr(
-            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
-        )
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.setattr(
             main_module,
             "render_to_image",
-            lambda content, output, theme: rendered.append(output),
+            lambda markdown_text, output, theme: rendered.append(output),
         )
 
         def fail_to_upload(tv_ip, image_path):
@@ -434,11 +434,10 @@ class TestDefaultTheme:
         content_file.write_text("# Goals")
         monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
         monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.delenv("FRAME_THEME", raising=False)
 
-        _, _, theme = get_config()
-
-        assert theme == "clean"
+        assert get_config().theme == "clean"
 
 
 class TestFitToFrame:
@@ -486,3 +485,191 @@ class TestFitToFrame:
         scale = self._scale_for(f"# Goals\n## Today\n\n{goals}")
 
         assert 0.25 <= scale < 1.0
+
+
+class TestFocusModeConfig:
+    """Tests for choosing between markdown mode and focus mode."""
+
+    VAULT = Path(__file__).parent / "fixtures" / "vault"
+    FOCUS_FILE = VAULT / "flow-focus-data" / "focus.md"
+
+    @pytest.fixture(autouse=True)
+    def env(self, monkeypatch):
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        for name in (
+            "FRAME_CONTENT_FILE",
+            "FRAME_FOCUS_FILE",
+            "FRAME_VAULT_ROOT",
+            "FRAME_BOARD_TITLE",
+            "FRAME_BOARD_MESSAGE",
+            "FRAME_THEME",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+    def test_focus_file_chooses_focus_mode(self, monkeypatch):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        monkeypatch.setenv("FRAME_BOARD_MESSAGE", "No new things!")
+
+        config = get_config()
+        board = config.read_content()
+
+        assert config.source == self.FOCUS_FILE
+        assert board.startswith("# Goals\n## ")
+        assert "**No new things!**" in board
+        assert "### Acme\n- Write up and share onboarding guide\n" in board
+
+    def test_board_title_can_be_set(self, monkeypatch):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        monkeypatch.setenv("FRAME_BOARD_TITLE", "Focus")
+
+        assert get_config().read_content().startswith("# Focus\n")
+
+    def test_focus_mode_needs_a_vault_root(self, monkeypatch):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "FRAME_VAULT_ROOT" in str(excinfo.value)
+
+    def test_vault_root_must_be_a_directory(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(tmp_path / "missing"))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "Vault root not found" in str(excinfo.value)
+
+    def test_missing_focus_file_exits(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(tmp_path / "focus.md"))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "Focus file not found" in str(excinfo.value)
+
+    def test_both_modes_set_is_an_error(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("# Goals")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "both" in str(excinfo.value)
+
+    def test_neither_mode_set_names_both_variables(self):
+        from frame_automation.main import get_config
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "FRAME_CONTENT_FILE" in str(excinfo.value)
+        assert "FRAME_FOCUS_FILE" in str(excinfo.value)
+
+    def test_main_publishes_the_board_in_focus_mode(self, monkeypatch):
+        from frame_automation import main as main_module
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        rendered = []
+        monkeypatch.setattr(
+            main_module,
+            "render_to_image",
+            lambda markdown_text, output, theme: rendered.append(markdown_text),
+        )
+        monkeypatch.setattr(main_module, "publish_image", lambda tv_ip, path: None)
+
+        main_module.main()
+
+        assert rendered and rendered[0].startswith("# Goals\n## ")
+
+
+class TestDoneTodaySection:
+    """Tests for how the clean theme shows the board's `####` Done today section."""
+
+    BOARD = (
+        "# Goals\n## November 4 2026\n\n"
+        "### First goal\n- A step\n\n"
+        "#### Done today\n- Finished thing\n\n"
+        "### Second goal\n- Another step\n"
+    )
+
+    def _measure(self, markdown_text):
+        from playwright.sync_api import sync_playwright
+
+        from frame_automation.main import (
+            IMAGE_HEIGHT,
+            IMAGE_WIDTH,
+            build_page_html,
+            fit_to_frame,
+        )
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(
+                viewport={"width": IMAGE_WIDTH, "height": IMAGE_HEIGHT}
+            )
+            page.set_content(build_page_html(markdown_text, "clean"))
+            scale = fit_to_frame(page)
+            styles = page.evaluate(
+                """() => {
+    const style = (selector) => getComputedStyle(document.querySelector(selector));
+    return {
+        h4Counter: style('h4').counterIncrement,
+        h3Counter: style('h3').counterIncrement,
+        h4Zoom: parseFloat(style('h4').zoom),
+        doneDecoration: style('h4 ~ ul li').textDecorationLine,
+        goalDecoration: style('ul li').textDecorationLine,
+        h4Bottom: document.querySelector('h4').getBoundingClientRect().bottom,
+    };
+}"""
+            )
+            browser.close()
+        return scale, styles
+
+    def test_done_today_renders_without_taking_a_goal_number(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["h4Counter"] == "none"
+        assert styles["h3Counter"] == "goal 1"
+        assert styles["doneDecoration"] == "line-through"
+        assert styles["goalDecoration"] == "none"
+
+    def test_done_today_shrinks_with_an_overflowing_board(self):
+        pytest.importorskip("playwright")
+
+        goals = "\n\n".join(
+            f"### Goal number {n} with a reasonably long title\n"
+            "- First item\n- Second item\n- Third item"
+            for n in range(1, 8)
+        )
+        done = "\n".join(f"- Finished thing {n}" for n in range(1, 6))
+
+        scale, styles = self._measure(
+            f"# Goals\n## Today\n\n{goals}\n\n#### Done today\n{done}\n"
+        )
+
+        assert 0.25 <= scale < 1.0
+        assert styles["h4Zoom"] == pytest.approx(scale)
+        assert styles["h4Bottom"] <= 1080

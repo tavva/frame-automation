@@ -147,3 +147,12 @@ def build_board_markdown(
     if done:
         sections.append(f"#### {DONE_HEADING}\n" + "".join(f"- {text}\n" for text in done))
     return "\n".join(sections)
+
+
+def build_board_from_file(
+    focus_path: Path, vault_root: Path, today: date, title: str, message: str | None
+) -> str:
+    """Read Flow's focus file and build the board for the given day."""
+    return build_board_markdown(
+        read_focus_items(focus_path), vault_root, today, title, message
+    )

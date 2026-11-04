@@ -3,6 +3,8 @@
 
 import json
 import re
+import sys
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
@@ -14,17 +16,50 @@ TAG = re.compile(r"(?<!\S)#(?!\d+(?!\S))[^\s#]+")
 WIKILINK = re.compile(r"\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]")
 
 
-def read_focus_items(path: Path) -> list[dict]:
-    """Read Flow's focus file, skipping lines that fail to parse as Flow does."""
+def read_focus_items(path: Path) -> tuple[list[dict], list[str]]:
+    """Read Flow's focus file, returning its items and a note on each line skipped.
+
+    Lines that fail to parse or lack the fields the board needs are skipped, as
+    Flow skips lines it can't parse. Blank lines are skipped without a note.
+    """
     items = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    problems = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
         try:
             item = json.loads(line)
         except json.JSONDecodeError:
+            problems.append(f"line {number}: not valid JSON")
             continue
-        if isinstance(item, dict):
-            items.append(item)
-    return items
+        problem = find_item_problem(item)
+        if problem:
+            problems.append(f"line {number}: {problem}")
+            continue
+        items.append(item)
+    return items, problems
+
+
+def find_item_problem(item) -> str | None:
+    """Say what stops a parsed line from being shown, or None if it can be."""
+    if not isinstance(item, dict):
+        return "not a JSON object"
+    if not isinstance(item.get("text"), str):
+        return "no text"
+    completed_at = item.get("completedAt")
+    if completed_at is not None and (
+        isinstance(completed_at, bool) or not isinstance(completed_at, (int, float))
+    ):
+        return "completedAt is not a number"
+    if "external" in item:
+        external = item["external"]
+        if not isinstance(external, dict):
+            return "external is not an object"
+        if not isinstance(external.get("sourceLabel"), str) or not external["sourceLabel"].strip():
+            return "external item has no sourceLabel"
+    elif not isinstance(item.get("file"), str):
+        return "vault item has no file"
+    return None
 
 
 def clean_item_text(text: str) -> str:
@@ -149,10 +184,41 @@ def build_board_markdown(
     return "\n".join(sections)
 
 
-def build_board_from_file(
-    focus_path: Path, vault_root: Path, today: date, title: str, message: str | None
-) -> str:
-    """Read Flow's focus file and build the board for the given day."""
-    return build_board_markdown(
-        read_focus_items(focus_path), vault_root, today, title, message
-    )
+def print_warning(message: str) -> None:
+    print(f"Warning: {message}", file=sys.stderr, flush=True)
+
+
+class FocusBoard:
+    """Builds the board from Flow's focus file, warning once about each skipped line.
+
+    The watcher rebuilds the board every second, so a skipped line is reported
+    when it first appears rather than on every build.
+    """
+
+    def __init__(
+        self,
+        focus_path: Path,
+        vault_root: Path,
+        title: str,
+        message: str | None,
+        *,
+        today: Callable[[], date] = date.today,
+        warn: Callable[[str], None] = print_warning,
+    ):
+        self.focus_path = focus_path
+        self.vault_root = vault_root
+        self.title = title
+        self.message = message
+        self.today = today
+        self.warn = warn
+        self.reported_problems = set()
+
+    def build(self) -> str:
+        items, problems = read_focus_items(self.focus_path)
+        for problem in problems:
+            if problem not in self.reported_problems:
+                self.warn(f"Skipped {self.focus_path} {problem}")
+        self.reported_problems = set(problems)
+        return build_board_markdown(
+            items, self.vault_root, self.today(), self.title, self.message
+        )

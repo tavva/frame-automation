@@ -184,6 +184,12 @@ em {
     font-style: italic;
 }
 
+/* Links can't be followed on the TV, so they read as plain text */
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
 code {
     font-family: 'Space Mono', monospace;
     font-size: 0.85em;

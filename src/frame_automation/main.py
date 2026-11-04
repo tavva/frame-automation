@@ -11,7 +11,6 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 import threading
@@ -20,7 +19,7 @@ import time
 from samsungtvws import SamsungTVWS
 from wakeonlan import send_magic_packet
 
-from frame_automation.focus_board import build_board_from_file
+from frame_automation.focus_board import FocusBoard
 
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
@@ -230,9 +229,7 @@ def get_focus_source(focus_path: Path) -> tuple[Path, Callable[[], str]]:
     if not focus_path.exists():
         sys.exit(f"Error: Focus file not found: {focus_path}")
 
-    return focus_path, lambda: build_board_from_file(
-        focus_path, vault_path, date.today(), title, message
-    )
+    return focus_path, FocusBoard(focus_path, vault_path, title, message).build
 
 
 def find_theme_path(theme_name: str) -> tuple[Path, Path]:

@@ -506,7 +506,13 @@ class TestFocusModeConfig:
         ):
             monkeypatch.delenv(name, raising=False)
 
-    def test_focus_file_chooses_focus_mode(self, monkeypatch):
+    def expect_fixture_warning(self, capsys):
+        """The fixture focus file has one line that isn't JSON, which is reported."""
+        assert capsys.readouterr().err == (
+            f"Warning: Skipped {self.FOCUS_FILE} line 5: not valid JSON\n"
+        )
+
+    def test_focus_file_chooses_focus_mode(self, monkeypatch, capsys):
         from frame_automation.main import get_config
 
         monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
@@ -520,8 +526,9 @@ class TestFocusModeConfig:
         assert board.startswith("# Goals\n## ")
         assert "**No new things!**" in board
         assert "### Acme\n- Write up and share onboarding guide\n" in board
+        self.expect_fixture_warning(capsys)
 
-    def test_board_title_can_be_set(self, monkeypatch):
+    def test_board_title_can_be_set(self, monkeypatch, capsys):
         from frame_automation.main import get_config
 
         monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
@@ -529,6 +536,7 @@ class TestFocusModeConfig:
         monkeypatch.setenv("FRAME_BOARD_TITLE", "Focus")
 
         assert get_config().read_content().startswith("# Focus\n")
+        self.expect_fixture_warning(capsys)
 
     def test_focus_mode_needs_a_vault_root(self, monkeypatch):
         from frame_automation.main import get_config
@@ -585,7 +593,7 @@ class TestFocusModeConfig:
         assert "FRAME_CONTENT_FILE" in str(excinfo.value)
         assert "FRAME_FOCUS_FILE" in str(excinfo.value)
 
-    def test_main_publishes_the_board_in_focus_mode(self, monkeypatch):
+    def test_main_publishes_the_board_in_focus_mode(self, monkeypatch, capsys):
         from frame_automation import main as main_module
 
         monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
@@ -601,6 +609,7 @@ class TestFocusModeConfig:
         main_module.main()
 
         assert rendered and rendered[0].startswith("# Goals\n## ")
+        self.expect_fixture_warning(capsys)
 
 
 class TestDoneTodaySection:

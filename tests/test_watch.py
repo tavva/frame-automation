@@ -275,12 +275,18 @@ class TestFocusModeWatcher:
 
     def _watcher(self, vault, today, published, clock):
         from frame_automation import main as main_module
-        from frame_automation.focus_board import build_board_from_file
+        from frame_automation.focus_board import FocusBoard
 
+        self.warnings = []
         return main_module.ContentWatcher(
-            lambda: build_board_from_file(
-                vault / "flow-focus-data" / "focus.md", vault, today[0], "Goals", None
-            ),
+            FocusBoard(
+                vault / "flow-focus-data" / "focus.md",
+                vault,
+                "Goals",
+                None,
+                today=lambda: today[0],
+                warn=self.warnings.append,
+            ).build,
             published.append,
             state_file=vault.parent / "state",
             clock=clock,
@@ -335,3 +341,32 @@ class TestFocusModeWatcher:
 
         assert len(published) == 2
         assert "## November 5 2026\n" in published[1]
+
+    def test_a_briefly_empty_or_truncated_file_never_reaches_the_tv(self, vault):
+        """A sync that empties or truncates focus.md for less than the debounce is ignored."""
+        from datetime import date
+
+        clock = FakeClock()
+        published = []
+        watcher = self._watcher(vault, [date(2026, 11, 4)], published, clock)
+        focus_file = vault / "flow-focus-data" / "focus.md"
+        full = focus_file.read_text()
+
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+        assert len(published) == 1
+
+        focus_file.write_text("")
+        watcher.poll()
+        clock.advance(4)
+        focus_file.write_text(full[:200])
+        watcher.poll()
+        clock.advance(4)
+        focus_file.write_text(full)
+        watcher.poll()
+        clock.advance(60)
+        watcher.poll()
+
+        assert len(published) == 1
+        assert any(w.endswith("line 1: not valid JSON") for w in self.warnings)

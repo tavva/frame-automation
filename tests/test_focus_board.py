@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from frame_automation.focus_board import (
+    FocusBoard,
     build_board_markdown,
     clean_item_text,
     read_focus_items,
@@ -79,8 +80,9 @@ def group_of(item):
 
 class TestReadFocusItems:
     def test_reads_every_line_of_the_real_focus_file(self):
-        items = read_focus_items(FIXTURES / "real-focus.md")
+        items, problems = read_focus_items(FIXTURES / "real-focus.md")
 
+        assert problems == []
         assert [item["text"] for item in items][:2] == [
             "Buy bubble bath",
             "Look at kerning on the website relaunch logo",
@@ -88,19 +90,74 @@ class TestReadFocusItems:
         assert len(items) == 5
 
     def test_skips_lines_that_fail_to_parse_and_blank_lines(self):
-        items = read_focus_items(FOCUS_FILE)
+        items, problems = read_focus_items(FOCUS_FILE)
 
         assert len(items) == 9
-        assert all(isinstance(item, dict) for item in items)
+        assert problems == ["line 5: not valid JSON"]
+
+    @pytest.mark.parametrize(
+        ("line", "problem"),
+        [
+            ('{"text": "Truncated mid-sy', "not valid JSON"),
+            ('["not", "an", "object"]', "not a JSON object"),
+            ('{"text": "Onboarding", "external": null}', "external is not an object"),
+            ('{"text": "Onboarding", "external": {"sourceName": "linear"}}',
+             "external item has no sourceLabel"),
+            ('{"text": "Plumber", "isGeneral": true}', "vault item has no file"),
+            ('{"file": "Next actions.md", "isGeneral": true}', "no text"),
+            ('{"file": "Next actions.md", "text": "Bath", "completedAt": "today"}',
+             "completedAt is not a number"),
+        ],
+    )
+    def test_skips_lines_the_board_cannot_show(self, tmp_path, line, problem):
+        focus_file = tmp_path / "focus.md"
+        good = '{"file": "Next actions.md", "text": "Bath", "isGeneral": true}'
+        focus_file.write_text(f"{good}\n{line}\n")
+
+        items, problems = read_focus_items(focus_file)
+
+        assert [item["text"] for item in items] == ["Bath"]
+        assert problems == [f"line 2: {problem}"]
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             read_focus_items(tmp_path / "focus.md")
 
 
+class TestFocusBoard:
+    def test_warns_once_about_each_skipped_line(self, tmp_path):
+        focus_file = tmp_path / "focus.md"
+        focus_file.write_text('{"text": "Onboarding", "external": null}\n')
+        warnings = []
+        focus_board = FocusBoard(
+            focus_file, VAULT, "Goals", None,
+            today=lambda: date(2026, 11, 4), warn=warnings.append,
+        )
+
+        focus_board.build()
+        focus_board.build()
+        assert warnings == [f"Skipped {focus_file} line 1: external is not an object"]
+
+        focus_file.write_text('{"text": "Onboarding", "external": null}\n{oops\n')
+        focus_board.build()
+
+        assert warnings[1:] == [f"Skipped {focus_file} line 2: not valid JSON"]
+
+    def test_warning_goes_to_stderr_by_default(self, tmp_path, capsys):
+        focus_file = tmp_path / "focus.md"
+        focus_file.write_text("{oops\n")
+
+        board_text = FocusBoard(focus_file, VAULT, "Goals", None).build()
+
+        assert board_text.startswith("# Goals\n")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == f"Warning: Skipped {focus_file} line 1: not valid JSON\n"
+
+
 class TestWholeBoard:
     def test_builds_the_board_from_the_fixture_focus_file(self):
-        markdown = board(read_focus_items(FOCUS_FILE), message="No new things!")
+        markdown = board(read_focus_items(FOCUS_FILE)[0], message="No new things!")
 
         assert markdown == (
             "# Goals\n"
@@ -129,7 +186,7 @@ class TestWholeBoard:
 
     def test_real_focus_file_on_its_completion_day_lists_everything_as_done(self):
         markdown = board(
-            read_focus_items(FIXTURES / "real-focus.md"), today=date(2026, 10, 30)
+            read_focus_items(FIXTURES / "real-focus.md")[0], today=date(2026, 10, 30)
         )
 
         assert headings(markdown) == []
@@ -264,7 +321,7 @@ class TestDoneToday:
         assert markdown.endswith("#### Done today\n- Early\n")
 
     def test_same_items_on_two_dates_build_different_boards(self):
-        items = read_focus_items(FOCUS_FILE)
+        items, _ = read_focus_items(FOCUS_FILE)
 
         assert board(items, today=date(2026, 11, 4)) != board(
             items, today=date(2026, 11, 5)
@@ -293,3 +350,8 @@ class TestCleanItemText:
     )
     def test_strips_vault_markup_and_keeps_markdown(self, text, cleaned):
         assert clean_item_text(text) == cleaned
+
+    def test_external_item_text_is_cleaned_too(self):
+        item = external_item("Acme", "Review [[Onboarding guide|the plan]] #context/work")
+
+        assert "### Acme\n- Review the plan\n" in board([item])

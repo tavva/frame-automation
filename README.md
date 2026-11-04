@@ -2,7 +2,7 @@
 
 Display markdown content on a Samsung Frame TV in Art Mode. Note that I've only tested this on an old Frame, I believe this won't work with newer models.
 
-Reads a markdown file, renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
+Reads a markdown file, or builds a board from the Focus list of [Flow](https://github.com/tavva/flow) (an Obsidian GTD plugin), renders it to a styled 1920×1080 image (I have a 32" Frame), and uploads it via [samsungtvws](https://github.com/xchwarze/samsung-tv-ws-api).
 
 <p align="center">
   <img src="docs/assets/demo-screenshot.jpg" alt="Rendered output" width="600">
@@ -26,7 +26,7 @@ uv sync --extra render
 uv run playwright install chromium
 ```
 
-The `render` extra pulls in markdown and Playwright. Without it only
+The `render` extra pulls in markdown, Playwright and PyYAML. Without it only
 `frame-image` and the power control commands work; `uv sync` on its own is
 enough for those.
 
@@ -46,15 +46,91 @@ To keep watching the configured file, run:
 uv run frame-watch
 ```
 
-`frame-watch` checks the file once per second and publishes it after changes
-have stopped for 10 seconds. It records the last successful content digest in
+`frame-watch` checks the content once per second and publishes it after
+changes have stopped for 10 seconds. It records the last successful content digest in
 `~/.frame-automation/last_content_sha256`, avoids duplicate uploads after a
-restart, and retries failed updates after five minutes.
+restart, and retries failed updates after five minutes. A run of failures
+is logged in full once, then only when the error changes, and once more when
+an update gets through.
 
 This repository includes
 `launchd/net.ben-phillips.frame-goals-watch.plist`, a per-user macOS
-LaunchAgent configured for `/Users/ben/Documents/Main/Display goals.md` through
-the repository's `.envrc`.
+LaunchAgent that runs `frame-watch` through `direnv exec`, so it takes its
+settings from the repository's `.envrc` (which loads `.env` first). The
+`.envrc` decides what it shows: `FRAME_CONTENT_FILE` for a markdown file such
+as `/Users/ben/Documents/Main/Display goals.md`, or the focus variables below.
+
+### Building the board from Flow's Focus list
+
+Instead of a markdown file, the board can be built from Flow's focus file:
+
+```bash
+export FRAME_TV_IP=192.168.1.x
+export FRAME_FOCUS_FILE=/path/to/vault/flow-focus-data/focus.md
+export FRAME_VAULT_ROOT=/path/to/vault
+export FRAME_BOARD_TITLE=Goals             # optional, the default
+export FRAME_BOARD_MESSAGE="No new things!" # optional, shown in bold under the date
+
+uv run frame-update   # or frame-watch
+```
+
+Set `FRAME_FOCUS_FILE` or `FRAME_CONTENT_FILE`, not both. frame-automation only
+reads Flow's files; it never writes to them.
+
+To switch the LaunchAgent from `Display goals.md` to the Focus board, replace
+the `FRAME_CONTENT_FILE` line in `.envrc` with:
+
+```bash
+export FRAME_FOCUS_FILE="${FRAME_FOCUS_FILE:-$HOME/Documents/Main/flow-focus-data/focus.md}"
+export FRAME_VAULT_ROOT="${FRAME_VAULT_ROOT:-$HOME/Documents/Main}"
+export FRAME_BOARD_MESSAGE="${FRAME_BOARD_MESSAGE:-No new things!}"
+```
+
+Make sure `.env` doesn't set `FRAME_CONTENT_FILE` either, or `frame-watch`
+exits with "not both". Then run `direnv allow` in the repository and restart
+the agent:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/net.ben-phillips.frame-goals-watch
+```
+
+To go back, restore the `FRAME_CONTENT_FILE` line and remove the three focus
+lines.
+
+The board shows today's date and the unfinished Focus items, pinned ones
+first, grouped under a `###` heading each:
+
+- items from other plugins under their source label (e.g. `Acme`)
+- general next actions under `Misc`
+- project actions under their top-level project, found by following each
+  project's `parent-project` link up to a project with no parent. The heading
+  is that project's file name, as Flow shows it.
+
+Within a group, items can sit under a `####` subgroup:
+
+- items from other plugins under their project (`external.projectName`, such
+  as a Linear project), when they have one
+- project actions under their own project when it isn't the top-level one,
+  so a sub-project gets a subgroup however deep it sits
+
+Items with no subgroup, such as actions in the top-level project itself, come
+first, straight under the group. `Misc` has no subgroups.
+
+Items completed today follow under a `##### Done today` heading. Source links
+(`([[…|source]])`), `#tags`, embeds (`![[…]]`) and wikilinks are stripped from
+item text, so the board shows plain wording; markdown links and emphasis are
+kept. Items with no text left are left off.
+
+Links resolve as Obsidian resolves them: by vault-relative path, then by
+unique file name, ignoring case and skipping dot-folders such as `.obsidian`
+and `.trash`.
+
+`frame-watch` rebuilds the board every second, so it updates after a Focus
+change, after a project moves under a different parent, and at midnight when
+the date changes. A focus file line that can't be shown (bad JSON, or missing
+the fields the board needs) is skipped with a warning on stderr. A file that
+is briefly empty or half-written while syncing doesn't reach the TV, because
+changes only publish once they've held for 10 seconds.
 
 ### Sending an existing image
 
@@ -110,6 +186,11 @@ right, opposite the title:
 
 A single `# Goals - August 31 2026` also works; the whole line then runs along
 the left of the rule.
+
+An `h4` is a smaller, unnumbered subheading within a goal, with its list set
+in beneath it; the Flow board uses it for subgroups. An `h5` starts a quiet,
+unnumbered section whose list straight after it is struck through; the Flow
+board uses it for `##### Done today`. Neither takes a goal number.
 
 Goals shrink to fit the frame as you add more of them, down to a quarter of
 their designed size. The header and the rules stay put.

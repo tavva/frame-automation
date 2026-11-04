@@ -120,13 +120,13 @@ class TestMainOrdering:
         content_file = tmp_path / "content.md"
         content_file.write_text("# Hello")
 
-        monkeypatch.setattr(
-            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
-        )
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.setattr(
             main_module,
             "render_to_image",
-            lambda content, output, theme: calls.append("render"),
+            lambda markdown_text, output, theme: calls.append("render"),
         )
         monkeypatch.setattr(
             main_module,
@@ -166,13 +166,13 @@ class TestMainCleanup:
         content_file.write_text("# Hello")
         rendered = []
 
-        monkeypatch.setattr(
-            main_module, "get_config", lambda: ("192.168.1.100", content_file, "default")
-        )
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.setattr(
             main_module,
             "render_to_image",
-            lambda content, output, theme: rendered.append(output),
+            lambda markdown_text, output, theme: rendered.append(output),
         )
 
         def fail_to_upload(tv_ip, image_path):
@@ -434,11 +434,10 @@ class TestDefaultTheme:
         content_file.write_text("# Goals")
         monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
         monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
         monkeypatch.delenv("FRAME_THEME", raising=False)
 
-        _, _, theme = get_config()
-
-        assert theme == "clean"
+        assert get_config().theme == "clean"
 
 
 class TestFitToFrame:
@@ -486,3 +485,261 @@ class TestFitToFrame:
         scale = self._scale_for(f"# Goals\n## Today\n\n{goals}")
 
         assert 0.25 <= scale < 1.0
+
+
+class TestFocusModeConfig:
+    """Tests for choosing between markdown mode and focus mode."""
+
+    VAULT = Path(__file__).parent / "fixtures" / "vault"
+    FOCUS_FILE = VAULT / "flow-focus-data" / "focus.md"
+
+    @pytest.fixture(autouse=True)
+    def env(self, monkeypatch):
+        monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+        for name in (
+            "FRAME_CONTENT_FILE",
+            "FRAME_FOCUS_FILE",
+            "FRAME_VAULT_ROOT",
+            "FRAME_BOARD_TITLE",
+            "FRAME_BOARD_MESSAGE",
+            "FRAME_THEME",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+    def expect_fixture_warning(self, capsys):
+        """The fixture focus file has one line that isn't JSON, which is reported."""
+        assert capsys.readouterr().err == (
+            f"Warning: Skipped {self.FOCUS_FILE} line 5: not valid JSON\n"
+        )
+
+    def test_focus_file_chooses_focus_mode(self, monkeypatch, capsys):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        monkeypatch.setenv("FRAME_BOARD_MESSAGE", "No new things!")
+
+        config = get_config()
+        board = config.read_content()
+
+        assert config.source == self.FOCUS_FILE
+        assert board.startswith("# Goals\n## ")
+        assert "**No new things!**" in board
+        assert "### Acme\n- Write up and share onboarding guide\n" in board
+        self.expect_fixture_warning(capsys)
+
+    def test_board_title_can_be_set(self, monkeypatch, capsys):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        monkeypatch.setenv("FRAME_BOARD_TITLE", "Focus")
+
+        assert get_config().read_content().startswith("# Focus\n")
+        self.expect_fixture_warning(capsys)
+
+    def test_focus_mode_needs_a_vault_root(self, monkeypatch):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "FRAME_VAULT_ROOT" in str(excinfo.value)
+
+    def test_vault_root_must_be_a_directory(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(tmp_path / "missing"))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "Vault root not found" in str(excinfo.value)
+
+    def test_missing_focus_file_exits(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(tmp_path / "focus.md"))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "Focus file not found" in str(excinfo.value)
+
+    def test_both_modes_set_is_an_error(self, monkeypatch, tmp_path):
+        from frame_automation.main import get_config
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("# Goals")
+        monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "not both (check .envrc and .env)" in str(excinfo.value)
+
+    def test_neither_mode_set_names_both_variables(self):
+        from frame_automation.main import get_config
+
+        with pytest.raises(SystemExit) as excinfo:
+            get_config()
+
+        assert "FRAME_CONTENT_FILE" in str(excinfo.value)
+        assert "FRAME_FOCUS_FILE" in str(excinfo.value)
+
+    def test_main_publishes_the_board_in_focus_mode(self, monkeypatch, capsys):
+        from frame_automation import main as main_module
+
+        monkeypatch.setenv("FRAME_FOCUS_FILE", str(self.FOCUS_FILE))
+        monkeypatch.setenv("FRAME_VAULT_ROOT", str(self.VAULT))
+        rendered = []
+        monkeypatch.setattr(
+            main_module,
+            "render_to_image",
+            lambda markdown_text, output, theme: rendered.append(markdown_text),
+        )
+        monkeypatch.setattr(main_module, "publish_image", lambda tv_ip, path: None)
+
+        main_module.main()
+
+        assert rendered and rendered[0].startswith("# Goals\n## ")
+        self.expect_fixture_warning(capsys)
+
+
+class TestBoardSections:
+    """Tests for how the clean theme shows the board's `####` subgroups and
+    `#####` Done today section."""
+
+    BOARD = (
+        "# Goals\n## November 4 2026\n\n"
+        "### First goal\n- A step\n\n"
+        "#### A subgroup\n- A sub-step\n\n"
+        "#### A numbered subgroup\n1. A numbered sub-step\n\n"
+        "##### Done today\n- Finished thing\n\n"
+        "##### Done in order\n1. Finished first\n\n"
+        "### Second goal\n- Another step\n"
+    )
+
+    def _measure(self, markdown_text):
+        from playwright.sync_api import sync_playwright
+
+        from frame_automation.main import (
+            IMAGE_HEIGHT,
+            IMAGE_WIDTH,
+            build_page_html,
+            fit_to_frame,
+        )
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(
+                viewport={"width": IMAGE_WIDTH, "height": IMAGE_HEIGHT}
+            )
+            page.set_content(build_page_html(markdown_text, "clean"))
+            scale = fit_to_frame(page)
+            styles = page.evaluate(
+                """() => {
+    // Selectors missing from a board measure as null
+    const style = (selector) => {
+        const element = document.querySelector(selector);
+        return element ? getComputedStyle(element) : {};
+    };
+    const textLeft = (selector) => {
+        const element = document.querySelector(selector);
+        return element
+            ? element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingLeft)
+            : null;
+    };
+    return {
+        h3Counter: style('h3').counterIncrement,
+        h3Size: parseFloat(style('h3').fontSize),
+        h4Counter: style('h4').counterIncrement,
+        h4Before: getComputedStyle(document.querySelector('h4'), '::before').content,
+        h4Border: style('h4').borderBottomStyle,
+        h4Size: parseFloat(style('h4').fontSize),
+        h4Zoom: parseFloat(style('h4').zoom),
+        h4TextLeft: textLeft('h4'),
+        goalListLeft: textLeft('h3 + ul'),
+        subgroupListLeft: textLeft('h4 + ul'),
+        numberedSubgroupListLeft: textLeft('h4 + ol'),
+        subgroupDecoration: style('h4 + ul li').textDecorationLine,
+        h5Counter: style('h5').counterIncrement,
+        h5Zoom: parseFloat(style('h5').zoom),
+        doneDecoration: style('h5 + ul li').textDecorationLine,
+        numberedDoneDecoration: style('h5 + ol li').textDecorationLine,
+        h6Zoom: parseFloat(style('h6').zoom),
+        lastItemBottom: [...document.querySelectorAll('li')].pop().getBoundingClientRect().bottom,
+        contentBottom: (() => {
+            const container = document.querySelector('.container');
+            return container.getBoundingClientRect().bottom
+                - parseFloat(getComputedStyle(container).paddingBottom);
+        })(),
+        laterGoalDecoration: style('h3:last-of-type + ul li').textDecorationLine,
+        h5Bottom: document.querySelector('h5').getBoundingClientRect().bottom,
+    };
+}"""
+            )
+            browser.close()
+        return scale, styles
+
+    def test_subgroup_is_smaller_unnumbered_and_unruled(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["h4Counter"] == "none"
+        assert styles["h4Before"] == "none"
+        assert styles["h4Border"] == "none"
+        assert styles["h4Size"] < styles["h3Size"]
+        assert styles["subgroupDecoration"] == "none"
+
+    def test_subgroup_list_is_set_in_under_its_heading(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["subgroupListLeft"] > styles["h4TextLeft"]
+        assert styles["subgroupListLeft"] > styles["goalListLeft"]
+        assert styles["numberedSubgroupListLeft"] == styles["subgroupListLeft"]
+
+    def test_done_today_renders_without_taking_a_goal_number(self):
+        pytest.importorskip("playwright")
+
+        _, styles = self._measure(self.BOARD)
+
+        assert styles["h5Counter"] == "none"
+        assert styles["h3Counter"] == "goal 1"
+        assert styles["doneDecoration"] == "line-through"
+        assert styles["numberedDoneDecoration"] == "line-through"
+        assert styles["laterGoalDecoration"] == "none"
+
+    def test_subgroups_and_done_today_shrink_with_an_overflowing_board(self):
+        pytest.importorskip("playwright")
+        from frame_automation.main import FIT_MIN_SCALE
+
+        goals = "\n\n".join(
+            f"### Goal number {n} with a reasonably long title\n"
+            "- First item\n\n"
+            f"#### Subgroup {n}\n- Second item\n- Third item"
+            for n in range(1, 6)
+        )
+        done = "\n".join(f"- Finished thing {n}" for n in range(1, 6))
+
+        scale, styles = self._measure(
+            f"# Goals\n## Today\n\n{goals}\n\n###### A note\n\n"
+            f"##### Done today\n{done}\n"
+        )
+
+        # Above the minimum scale, so the board is shrunk to fit rather than cut off
+        assert FIT_MIN_SCALE < scale < 1.0
+        assert styles["h4Zoom"] == pytest.approx(scale)
+        assert styles["h5Zoom"] == pytest.approx(scale)
+        assert styles["h6Zoom"] == pytest.approx(scale)
+        # The last item ends inside the container, above its padding and the closing rule
+        assert styles["lastItemBottom"] <= styles["contentBottom"]

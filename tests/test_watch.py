@@ -1,3 +1,6 @@
+# ABOUTME: Tests for watching content and publishing it after changes settle.
+# ABOUTME: Covers debounce, retry, saved digests and focus-mode rebuilds.
+
 import hashlib
 
 import pytest
@@ -24,8 +27,8 @@ def test_initial_content_is_published_after_ten_quiet_seconds(tmp_path):
     published = []
 
     watcher = main_module.ContentWatcher(
-        content_file,
-        lambda: published.append(content_file.read_text()),
+        content_file.read_text,
+        published.append,
         state_file=state_file,
         clock=clock,
         debounce_seconds=10,
@@ -44,7 +47,7 @@ def test_initial_content_is_published_after_ten_quiet_seconds(tmp_path):
     assert state_file.read_text() == hashlib.sha256(b"# Goals\n").hexdigest()
 
 
-def test_failed_publish_is_retried_after_five_minutes(tmp_path):
+def test_failed_publish_is_retried_after_five_minutes(tmp_path, capsys):
     from frame_automation import main as main_module
 
     content_file = tmp_path / "goals.md"
@@ -53,13 +56,13 @@ def test_failed_publish_is_retried_after_five_minutes(tmp_path):
     clock = FakeClock()
     attempts = []
 
-    def publish():
+    def publish(content):
         attempts.append(clock())
         if len(attempts) == 1:
             raise ConnectionError("TV unavailable")
 
     watcher = main_module.ContentWatcher(
-        content_file,
+        content_file.read_text,
         publish,
         state_file=state_file,
         clock=clock,
@@ -82,6 +85,56 @@ def test_failed_publish_is_retried_after_five_minutes(tmp_path):
     assert attempts == [10, 310]
     assert state_file.exists()
 
+    err = capsys.readouterr().err
+    assert err.startswith(
+        "Update failed; retrying every 300s until it succeeds: TV unavailable\n"
+        "Traceback (most recent call last):\n"
+    )
+    assert err.endswith(
+        "ConnectionError: TV unavailable\nUpdate succeeded after 1 failed attempts\n"
+    )
+
+
+def test_a_night_of_failures_logs_only_when_the_error_changes(tmp_path, capsys):
+    from frame_automation import main as main_module
+
+    content_file = tmp_path / "goals.md"
+    content_file.write_text("# Goals\n")
+    clock = FakeClock()
+    errors = iter(
+        [TimeoutError("Operation timed out")] * 50
+        + [ConnectionRefusedError("Connection refused")] * 3
+    )
+
+    def publish(content):
+        error = next(errors, None)
+        if error:
+            raise error
+
+    watcher = main_module.ContentWatcher(
+        content_file.read_text,
+        publish,
+        state_file=tmp_path / "state",
+        clock=clock,
+        debounce_seconds=10,
+        retry_seconds=300,
+    )
+    watcher.poll()
+    for _ in range(60):
+        clock.advance(300)
+        watcher.poll()
+
+    lines = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if not line.startswith((" ", "Traceback", "TimeoutError"))
+    ]
+    assert lines == [
+        "Update failed; retrying every 300s until it succeeds: Operation timed out",
+        "Update still failing (attempt 51): Connection refused",
+        "Update succeeded after 53 failed attempts",
+    ]
+
 
 def test_watch_content_polls_once_per_second(tmp_path):
     from frame_automation import main as main_module
@@ -100,8 +153,8 @@ def test_watch_content_polls_once_per_second(tmp_path):
 
     with pytest.raises(StopWatching):
         main_module.watch_content(
-            content_file,
-            lambda: None,
+            content_file.read_text,
+            lambda content: None,
             state_file=tmp_path / "state",
             sleep=sleep,
         )
@@ -117,8 +170,8 @@ def test_new_changes_reset_the_quiet_period(tmp_path):
     clock = FakeClock()
     published = []
     watcher = main_module.ContentWatcher(
-        content_file,
-        lambda: published.append(content_file.read_text()),
+        content_file.read_text,
+        published.append,
         state_file=tmp_path / "state",
         clock=clock,
         debounce_seconds=10,
@@ -147,8 +200,8 @@ def test_persisted_digest_prevents_duplicate_publish_after_restart(tmp_path):
     clock = FakeClock()
     published = []
     watcher = main_module.ContentWatcher(
-        content_file,
-        lambda: published.append(True),
+        content_file.read_text,
+        published.append,
         state_file=state_file,
         clock=clock,
     )
@@ -167,8 +220,8 @@ def test_missing_file_is_ignored_until_it_reappears(tmp_path):
     clock = FakeClock()
     published = []
     watcher = main_module.ContentWatcher(
-        content_file,
-        lambda: published.append(content_file.read_text()),
+        content_file.read_text,
+        published.append,
         state_file=tmp_path / "state",
         clock=clock,
         debounce_seconds=10,
@@ -187,23 +240,19 @@ def test_missing_file_is_ignored_until_it_reappears(tmp_path):
 def test_file_vanishing_during_an_atomic_save_is_ignored(tmp_path):
     from frame_automation import main as main_module
 
-    class VanishingFile:
-        def exists(self):
-            return True
-
-        def read_bytes(self):
-            raise FileNotFoundError
+    def read_vanishing_file():
+        raise FileNotFoundError
 
     watcher = main_module.ContentWatcher(
-        VanishingFile(),
-        lambda: None,
+        read_vanishing_file,
+        lambda content: None,
         state_file=tmp_path / "state",
     )
 
     watcher.poll()
 
 
-def test_main_watch_reuses_the_configured_update_path(tmp_path, monkeypatch):
+def test_main_watch_publishes_what_the_watcher_read(tmp_path, monkeypatch):
     from frame_automation import main as main_module
 
     content_file = tmp_path / "goals.md"
@@ -211,33 +260,203 @@ def test_main_watch_reuses_the_configured_update_path(tmp_path, monkeypatch):
     state_file = tmp_path / "last_content_sha256"
     calls = []
 
-    monkeypatch.setattr(
-        main_module,
-        "get_config",
-        lambda: ("192.168.1.100", content_file, "clean"),
-    )
-    monkeypatch.setattr(
-        main_module,
-        "get_watch_state_file_path",
-        lambda: state_file,
-        raising=False,
-    )
+    monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+    monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+    monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
+    monkeypatch.setattr(main_module, "get_watch_state_file_path", lambda: state_file)
     monkeypatch.setattr(
         main_module,
         "update_content",
-        lambda tv_ip, path, theme: calls.append((tv_ip, path, theme)),
-        raising=False,
+        lambda tv_ip, markdown_text, theme: calls.append((tv_ip, markdown_text, theme)),
     )
 
-    def watch_once(path, publish, *, state_file):
-        calls.append(("watch", path, state_file))
-        publish()
+    def watch_once(read_content, publish, *, state_file):
+        calls.append(("watch", state_file))
+        publish(read_content())
 
     monkeypatch.setattr(main_module, "watch_content", watch_once)
 
     main_module.main_watch()
 
     assert calls == [
-        ("watch", content_file, state_file),
-        ("192.168.1.100", content_file, "clean"),
+        ("watch", state_file),
+        ("192.168.1.100", "# Goals\n", "clean"),
     ]
+
+
+def test_markdown_mode_digest_matches_the_file_bytes(tmp_path, monkeypatch):
+    """Digests saved before focus mode existed must still match."""
+    from frame_automation import main as main_module
+
+    content_file = tmp_path / "goals.md"
+    content_file.write_bytes(b"# Goals\r\n- caf\xc3\xa9\r\n")
+    state_file = tmp_path / "state"
+    state_file.write_text(hashlib.sha256(content_file.read_bytes()).hexdigest())
+    monkeypatch.setenv("FRAME_TV_IP", "192.168.1.100")
+    monkeypatch.setenv("FRAME_CONTENT_FILE", str(content_file))
+    monkeypatch.delenv("FRAME_FOCUS_FILE", raising=False)
+    clock = FakeClock()
+    published = []
+
+    watcher = main_module.ContentWatcher(
+        main_module.get_config().read_content,
+        published.append,
+        state_file=state_file,
+        clock=clock,
+    )
+    watcher.poll()
+    clock.advance(60)
+    watcher.poll()
+
+    assert published == []
+
+
+class TestFocusModeWatcher:
+    """A focus-mode watcher rebuilds the board every poll from the focus file and date."""
+
+    @pytest.fixture
+    def vault(self, tmp_path):
+        import shutil
+        from pathlib import Path
+
+        vault = tmp_path / "vault"
+        shutil.copytree(Path(__file__).parent / "fixtures" / "vault", vault)
+        return vault
+
+    def _watcher(self, vault, today, published, clock):
+        from frame_automation import main as main_module
+        from frame_automation.focus_board import FocusBoard, Vault
+
+        self.warnings = []
+        return main_module.ContentWatcher(
+            FocusBoard(
+                vault / "flow-focus-data" / "focus.md",
+                Vault(vault),
+                "Goals",
+                None,
+                today=lambda: today[0],
+                warn=self.warnings.append,
+            ).build,
+            published.append,
+            state_file=vault.parent / "state",
+            clock=clock,
+            debounce_seconds=10,
+        )
+
+    def test_publishes_after_a_focus_file_edit(self, vault):
+        from datetime import date
+
+        clock = FakeClock()
+        published = []
+        watcher = self._watcher(vault, [date(2026, 11, 4)], published, clock)
+
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+        assert len(published) == 1
+
+        focus_file = vault / "flow-focus-data" / "focus.md"
+        focus_file.write_text(
+            focus_file.read_text()
+            + '{"file":"Next actions.md","lineNumber":7,"lineContent":"- [ ] Water the plants",'
+            '"text":"Water the plants","sphere":"personal","isGeneral":true,"addedAt":1793520000007}\n'
+        )
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+
+        assert len(published) == 2
+        assert "- Water the plants\n" in published[1]
+        assert "- Water the plants\n" not in published[0]
+
+    def test_publishes_when_the_date_changes(self, vault):
+        from datetime import date
+
+        clock = FakeClock()
+        published = []
+        today = [date(2026, 11, 4)]
+        watcher = self._watcher(vault, today, published, clock)
+
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+        clock.advance(3600)
+        watcher.poll()
+        assert len(published) == 1
+
+        today[0] = date(2026, 11, 5)
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+
+        assert len(published) == 2
+        assert "## November 5 2026\n" in published[1]
+
+    def test_a_briefly_empty_or_truncated_file_never_reaches_the_tv(self, vault):
+        """A sync that empties or truncates focus.md for less than the debounce is ignored."""
+        from datetime import date
+
+        clock = FakeClock()
+        published = []
+        watcher = self._watcher(vault, [date(2026, 11, 4)], published, clock)
+        focus_file = vault / "flow-focus-data" / "focus.md"
+        focus_file.write_text(
+            focus_file.read_text()
+            + '{"file":"Next actions.md","lineNumber":8,"lineContent":"- [ ] Plan – later",'
+            '"text":"Plan – later","sphere":"personal","isGeneral":true,"addedAt":1793520000008}\n'
+        )
+        full = focus_file.read_text()
+        full_bytes = focus_file.read_bytes()
+        mid_dash = full_bytes.index("–".encode()) + 1
+
+        watcher.poll()
+        clock.advance(10)
+        watcher.poll()
+        assert len(published) == 1
+
+        focus_file.write_text("")
+        watcher.poll()
+        clock.advance(3)
+        focus_file.write_text(full[:200])
+        watcher.poll()
+        clock.advance(3)
+        focus_file.write_bytes(full_bytes[:mid_dash])
+        watcher.poll()
+        clock.advance(3)
+        focus_file.write_text(full)
+        watcher.poll()
+        clock.advance(60)
+        watcher.poll()
+
+        assert len(published) == 1
+        assert any(w.endswith("line 1: not valid JSON") for w in self.warnings)
+
+
+def test_markdown_file_cut_mid_character_waits_for_the_rest(tmp_path):
+    from frame_automation import main as main_module
+
+    content_file = tmp_path / "goals.md"
+    text = "# Goals\n- Platform team – AI\n"
+    cut = text.encode().index("–".encode()) + 1
+    content_file.write_bytes(text.encode()[:cut])
+    clock = FakeClock()
+    published = []
+    watcher = main_module.ContentWatcher(
+        lambda: content_file.read_bytes().decode("utf-8"),
+        published.append,
+        state_file=tmp_path / "state",
+        clock=clock,
+        debounce_seconds=10,
+    )
+
+    watcher.poll()
+    clock.advance(30)
+    watcher.poll()
+    assert published == []
+
+    content_file.write_text(text)
+    watcher.poll()
+    clock.advance(10)
+    watcher.poll()
+
+    assert published == [text]

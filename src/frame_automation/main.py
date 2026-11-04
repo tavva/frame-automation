@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ABOUTME: Renders markdown content to an image and uploads to Samsung Frame TV.
-# ABOUTME: Configured via FRAME_TV_IP, FRAME_CONTENT_FILE, and FRAME_THEME environment variables.
+# ABOUTME: Content is a markdown file (FRAME_CONTENT_FILE) or a board built from Flow's focus file (FRAME_FOCUS_FILE).
 
 import base64
 import hashlib
@@ -9,6 +9,9 @@ import os
 import re
 import sys
 import tempfile
+import traceback
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import threading
@@ -16,6 +19,8 @@ import time
 
 from samsungtvws import SamsungTVWS
 from wakeonlan import send_magic_packet
+
+from frame_automation.focus_board import FocusBoard, Vault
 
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
@@ -30,19 +35,29 @@ WAKE_MAX_RETRIES = 12  # Max attempts (12 * 5s = 60s timeout)
 
 
 class ContentWatcher:
-    """Publish a content file after it has remained unchanged for a while."""
+    """Publish content after it has remained unchanged for a while.
+
+    `read_content` returns the markdown to show. A missing file, or one cut off
+    part way through a character while it is being written, skips the poll.
+    `publish` receives the content that was hashed, so what is published is
+    exactly what the saved digest describes.
+
+    A run of failed publishes is logged in full once, then again only when the
+    error changes, and once more when publishing recovers, so a TV that is off
+    overnight doesn't fill the log.
+    """
 
     def __init__(
         self,
-        content_path: Path,
-        publish,
+        read_content: Callable[[], str],
+        publish: Callable[[str], None],
         *,
         state_file: Path,
         clock=time.monotonic,
         debounce_seconds: float = 10,
         retry_seconds: float = 300,
     ):
-        self.content_path = content_path
+        self.read_content = read_content
         self.publish = publish
         self.state_file = state_file
         self.clock = clock
@@ -53,58 +68,84 @@ class ContentWatcher:
         )
         self.observed_digest = None
         self.pending_digest = None
+        self.pending_content = None
         self.deadline = None
+        self.failed_attempts = 0
+        self.last_error = None
 
     def poll(self) -> None:
-        if not self.content_path.exists():
-            return
-
         try:
-            content = self.content_path.read_bytes()
-        except FileNotFoundError:
+            content = self.read_content()
+        except (FileNotFoundError, UnicodeDecodeError):
             return
 
-        digest = hashlib.sha256(content).hexdigest()
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         now = self.clock()
         if digest != self.observed_digest:
             self.observed_digest = digest
             if digest == self.published_digest:
                 self.pending_digest = None
+                self.pending_content = None
                 self.deadline = None
             else:
                 self.pending_digest = digest
+                self.pending_content = content
                 self.deadline = now + self.debounce_seconds
 
         if self.pending_digest is None or now < self.deadline:
             return
 
         try:
-            self.publish()
+            self.publish(self.pending_content)
         except Exception as error:
+            self.report_failure(error)
+            self.deadline = now + self.retry_seconds
+            return
+
+        if self.failed_attempts:
             print(
-                f"Update failed; retrying in {self.retry_seconds:g}s: {error}",
+                f"Update succeeded after {self.failed_attempts} failed attempts",
                 file=sys.stderr,
                 flush=True,
             )
-            self.deadline = now + self.retry_seconds
-            return
+            self.failed_attempts = 0
+            self.last_error = None
 
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         self.state_file.write_text(self.pending_digest)
         self.published_digest = self.pending_digest
         self.pending_digest = None
+        self.pending_content = None
         self.deadline = None
+
+    def report_failure(self, error: Exception) -> None:
+        self.failed_attempts += 1
+        if self.failed_attempts == 1:
+            print(
+                f"Update failed; retrying every {self.retry_seconds:g}s until it "
+                f"succeeds: {error}\n{traceback.format_exc()}",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif str(error) != self.last_error:
+            print(
+                f"Update still failing (attempt {self.failed_attempts}): {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+        self.last_error = str(error)
 
 
 def watch_content(
-    content_path: Path,
-    publish,
+    read_content: Callable[[], str],
+    publish: Callable[[str], None],
     *,
     state_file: Path,
     sleep=time.sleep,
 ) -> None:
-    """Watch a content file forever, polling it once per second."""
-    watcher = ContentWatcher(content_path, publish, state_file=state_file)
+    """Watch content forever, reading it once per second."""
+    watcher = ContentWatcher(read_content, publish, state_file=state_file)
     while True:
         watcher.poll()
         sleep(1)
@@ -160,26 +201,69 @@ def get_available_themes() -> list[str]:
     return sorted(themes)
 
 
-def get_config() -> tuple[str, Path, str]:
-    """Read configuration from environment variables."""
+@dataclass
+class Config:
+    """What to show on which TV: `read_content` returns the markdown to render."""
+
+    tv_ip: str
+    theme: str
+    source: Path
+    read_content: Callable[[], str]
+
+
+def get_config() -> Config:
+    """Read configuration from environment variables.
+
+    FRAME_CONTENT_FILE shows a markdown file as written; FRAME_FOCUS_FILE builds
+    the board from Flow's focus file instead.
+    """
     tv_ip = os.environ.get("FRAME_TV_IP")
     content_file = os.environ.get("FRAME_CONTENT_FILE")
+    focus_file = os.environ.get("FRAME_FOCUS_FILE")
     theme = os.environ.get("FRAME_THEME", "clean")
 
     if not tv_ip:
         sys.exit("Error: FRAME_TV_IP environment variable not set")
-    if not content_file:
-        sys.exit("Error: FRAME_CONTENT_FILE environment variable not set")
+    if content_file and focus_file:
+        sys.exit(
+            "Error: Set FRAME_CONTENT_FILE or FRAME_FOCUS_FILE, not both "
+            "(check .envrc and .env)"
+        )
+    if not content_file and not focus_file:
+        sys.exit("Error: Set FRAME_CONTENT_FILE or FRAME_FOCUS_FILE")
 
     available = get_available_themes()
     if theme not in available:
         sys.exit(f"Error: Unknown theme '{theme}'. Available: {', '.join(available)}")
 
+    if focus_file:
+        return Config(tv_ip, theme, *get_focus_source(Path(focus_file)))
+
     content_path = Path(content_file)
     if not content_path.exists():
         sys.exit(f"Error: Content file not found: {content_path}")
 
-    return tv_ip, content_path, theme
+    # Decoded from bytes so the digest matches the file's bytes, line endings and all
+    return Config(
+        tv_ip, theme, content_path, lambda: content_path.read_bytes().decode("utf-8")
+    )
+
+
+def get_focus_source(focus_path: Path) -> tuple[Path, Callable[[], str]]:
+    """Read the focus mode settings, returning the focus file and a board builder."""
+    vault_root = os.environ.get("FRAME_VAULT_ROOT")
+    title = os.environ.get("FRAME_BOARD_TITLE", "Goals")
+    message = os.environ.get("FRAME_BOARD_MESSAGE") or None
+
+    if not vault_root:
+        sys.exit("Error: FRAME_VAULT_ROOT environment variable not set")
+    vault_path = Path(vault_root)
+    if not vault_path.is_dir():
+        sys.exit(f"Error: Vault root not found: {vault_path}")
+    if not focus_path.exists():
+        sys.exit(f"Error: Focus file not found: {focus_path}")
+
+    return focus_path, FocusBoard(focus_path, Vault(vault_path), title, message).build
 
 
 def find_theme_path(theme_name: str) -> tuple[Path, Path]:
@@ -290,11 +374,11 @@ def fit_to_frame(page) -> float:
     )
 
 
-def render_to_image(content_path: Path, output_path: Path, theme: str) -> None:
+def render_to_image(markdown_text: str, output_path: Path, theme: str) -> None:
     """Render markdown content to image file."""
     from playwright.sync_api import sync_playwright
 
-    html = build_page_html(content_path.read_text(), theme)
+    html = build_page_html(markdown_text, theme)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -489,14 +573,14 @@ def main_image():
     print("Done!")
 
 
-def update_content(tv_ip: str, content_file: Path, theme: str) -> None:
-    """Render and publish one version of a configured markdown file."""
+def update_content(tv_ip: str, markdown_text: str, theme: str) -> None:
+    """Render and publish one version of the configured content."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         image_path = Path(f.name)
 
     try:
         print(f"Rendering image (theme: {theme})...")
-        render_to_image(content_file, image_path, theme)
+        render_to_image(markdown_text, image_path, theme)
         print(f"  Saved to {image_path}")
 
         publish_image(tv_ip, image_path)
@@ -506,19 +590,20 @@ def update_content(tv_ip: str, content_file: Path, theme: str) -> None:
 
 
 def main_watch() -> None:
-    """CLI entry point that publishes the content file after settled changes."""
-    tv_ip, content_file, theme = get_config()
-    print(f"Watching {content_file} (10s debounce)...", flush=True)
+    """CLI entry point that publishes the content after settled changes."""
+    config = get_config()
+    print(f"Watching {config.source} (10s debounce)...", flush=True)
 
     watch_content(
-        content_file,
-        lambda: update_content(tv_ip, content_file, theme),
+        config.read_content,
+        lambda markdown_text: update_content(config.tv_ip, markdown_text, config.theme),
         state_file=get_watch_state_file_path(),
     )
 
 
 def main():
-    update_content(*get_config())
+    config = get_config()
+    update_content(config.tv_ip, config.read_content(), config.theme)
 
 
 if __name__ == "__main__":

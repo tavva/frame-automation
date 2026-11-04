@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Python utility that displays markdown content on a Samsung Frame TV in Art Mode. Reads a markdown file, renders it to a styled 1920×1080 image using Playwright, and uploads via WebSocket to the TV.
+A Python utility that displays markdown content on a Samsung Frame TV in Art Mode. Reads a markdown file, or builds a board from Flow's focus file, renders it to a styled 1920×1080 image using Playwright, and uploads via WebSocket to the TV.
 
 ## Commands
 
@@ -19,6 +19,13 @@ export FRAME_CONTENT_FILE=/path/to/content.md
 export FRAME_THEME=clean  # optional: clean (default), dark, paper, paper-bleed, split, split-bleed
 uv run frame-update
 
+# Focus mode: build the board from Flow's focus file instead of FRAME_CONTENT_FILE
+export FRAME_FOCUS_FILE=/path/to/vault/flow-focus-data/focus.md
+export FRAME_VAULT_ROOT=/path/to/vault
+export FRAME_BOARD_TITLE=Goals             # optional
+export FRAME_BOARD_MESSAGE="No new things!" # optional
+uv run frame-watch
+
 # Send an existing PNG (no render extra needed)
 uv run frame-image /path/to/image.png
 
@@ -32,13 +39,15 @@ uv run pytest
 
 ## Architecture
 
-Single-module design in `src/frame_automation/main.py`:
+`src/frame_automation/main.py` holds rendering, the TV calls and the CLI;
+`src/frame_automation/focus_board.py` builds board markdown from Flow's focus
+file.
 
-1. **`get_config()`** - Validates environment variables, returns TV IP, content path, theme
+1. **`get_config()`** - Validates environment variables and returns a `Config`: TV IP, theme, the source file, and `read_content()`, which returns the markdown to show (the file as written, or the built focus board)
 2. **`load_theme_css(theme_name)`** - Loads theme CSS, embedding relative `url()` images as base64 data URIs
 3. **`build_page_html(markdown_text, theme)`** - Converts markdown to HTML and wraps it in a page styled with the theme CSS
 4. **`fit_to_frame(page)`** - Measures the rendered content and publishes `--fit-scale` on the container, so themes that size themselves with it shrink to fit
-5. **`render_to_image(content_path, output_path, theme)`** - Renders the fitted page to PNG
+5. **`render_to_image(markdown_text, output_path, theme)`** - Renders the fitted page to PNG
 6. **`upload_to_tv(tv_ip, image_path)`** - Uploads image via samsungtvws WebSocket API
 7. **`set_active_art(tv_ip, content_id)`** - Sets uploaded image as active artwork
 8. **`delete_previous_art(tv_ip)`** - Removes the image uploaded by the previous run, tracked in `~/.frame-automation/last_content_id`
@@ -50,6 +59,19 @@ Single-module design in `src/frame_automation/main.py`:
 previous one, so a failure part way through never leaves the TV without
 artwork.
 
+`ContentWatcher` hashes what `read_content()` returns and, after 10 quiet
+seconds, publishes exactly that content. In focus mode the board is rebuilt
+every poll, so Focus edits, project moves and the date changing all count as
+changes.
+
+In `focus_board.py`:
+
+- **`read_focus_items(path)`** - Parses the JSONL focus file, returning items and a note for each line skipped
+- **`build_board_markdown(items, vault_root, today, title, message)`** - Groups unfinished items (external by `sourceLabel`, general under `Misc`, project items under their top-level project via `parent-project`), then lists `#### Done today`
+- **`FocusBoard`** - Reads the file and builds the board for today, warning once about each skipped line
+
+Flow's focus file format is documented in Flow's README ("Focus File Format").
+
 ## Themes
 
 Themes live in `themes/` directory:
@@ -59,9 +81,14 @@ Themes live in `themes/` directory:
 
 Each theme is self-contained CSS with full styling control. Relative `url()` references are resolved to the theme's directory.
 
+The clean theme styles `h4` as the unnumbered, struck-through Done today
+section. Every element it scales with `--fit-scale` must be listed in its
+`zoom` rule.
+
 ## Dependencies
 
 - **markdown** - Markdown to HTML conversion
+- **PyYAML** - Project frontmatter for `parent-project` links
 - **Playwright** - Headless browser for HTML→PNG rendering
 - **samsungtvws** - Samsung TV WebSocket API client for Art Mode
 
